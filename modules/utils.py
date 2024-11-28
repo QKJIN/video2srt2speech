@@ -39,16 +39,30 @@ def format_time(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
 def convert_to_srt(subtitles):
-    """将字幕转换为SRT格式"""
-    srt_content = ""
+    """将JSON字幕转换为SRT格式"""
+    srt_content = []
     for i, subtitle in enumerate(subtitles, 1):
         start_time = float(subtitle['start'])
-        duration = float(subtitle.get('duration', 5))
+        duration = float(subtitle['duration'])
         end_time = start_time + duration
         
-        start_str = f"{int(start_time//3600):02d}:{int((start_time%3600)//60):02d}:{int(start_time%60):02d},{int((start_time*1000)%1000):03d}"
-        end_str = f"{int(end_time//3600):02d}:{int((end_time%3600)//60):02d}:{int(end_time%60):02d},{int((end_time*1000)%1000):03d}"
+        # 转换时间格式 (秒 -> HH:MM:SS,mmm)
+        start = format_time(start_time)
+        end = format_time(end_time)
         
-        srt_content += f"{i}\n{start_str} --> {end_str}\n{subtitle.get('text', '')}\n\n"
+        srt_content.extend([
+            str(i),
+            f"{start} --> {end}",
+            subtitle['text'],
+            ""  # 空行分隔
+        ])
     
-    return srt_content 
+    return "\n".join(srt_content)
+
+def format_time(seconds):
+    """将秒数转换为SRT时间格式"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    seconds = seconds % 60
+    milliseconds = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{int(seconds):02d},{milliseconds:03d}"

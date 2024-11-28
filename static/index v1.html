@@ -500,6 +500,60 @@
         // 修改按钮的事件监听器
         document.getElementById('saveSubtitlesBtn').onclick = handleSaveSubtitles;
 
+        // 修改生成字幕按钮的处理函数
+        document.getElementById('generateSubtitlesBtn').onclick = async function() {
+            if (!currentFileId) {
+                showMessage('错误', '请先上传视频文件');
+                return;
+            }
+
+            try {
+                showLoading();
+                const sourceLanguage = document.getElementById('sourceLanguage').value;
+                const modelSelect = document.getElementById('subtitleModel');
+                const model = modelSelect.value;
+                
+                console.log('使用模型:', model);  // 调试日志
+                
+                // 构建 URL 参数
+                const params = new URLSearchParams();
+                params.append('language', sourceLanguage);
+                params.append('model', model);  // 确保添加 model 参数
+                
+                const url = `/generate-subtitles/${currentFileId}?${params.toString()}`;
+                console.log('请求 URL:', url);  // 调试日志
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('服务器错误:', errorText);
+                    throw new Error(errorText);
+                }
+
+                const subtitles = await response.json();
+                console.log('收到字幕数据:', subtitles);  // 调试日志
+
+                if (Array.isArray(subtitles) && subtitles.length > 0) {
+                    updateSubtitleEditor(subtitles);
+                    showMessage('成功', `成功生成 ${subtitles.length} 条字幕`);
+                } else {
+                    throw new Error('未收到有效的字幕数据');
+                }
+
+            } catch (error) {
+                console.error('生成字幕失败:', error);
+                showMessage('错误', '生成字幕失败: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        };
+
         // 修改 updateSubtitleEditor 函数
         function updateSubtitleEditor(subtitles) {
             const editor = document.getElementById('subtitleEditor');
@@ -522,20 +576,12 @@
                 html += `
                     <div class="subtitle-item" data-index="${i}" data-start="${subtitle.start}">
                         <div class="subtitle-header">
-                            <div class="subtitle-info">
-                                <span class="sequence-number" data-time="${subtitle.start}">${sequenceNumber}</span>
-                                <span class="subtitle-time">${startTime} - ${endTime}</span>
-                            </div>
+                            <span class="sequence-number" data-time="${subtitle.start}">${sequenceNumber}</span>
+                            <span class="subtitle-time">${startTime} - ${endTime}</span>
                             <div class="subtitle-controls">
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="playSubtitle(${i})">
-                                    <i class="fas fa-play"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-success me-1" onclick="generateSingleSpeech(${i})">
-                                    <i class="fas fa-volume-up"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-info" onclick="editSubtitle(${i})">
-                                    <i class="fas fa-edit"></i>
-                                </button>
+                                <button class="btn btn-sm btn-outline-primary edit-btn">编辑</button>
+                                <button class="btn btn-sm btn-outline-success save-btn" style="display: none;">保存</button>
+                                <button class="btn btn-sm btn-outline-secondary cancel-btn" style="display: none;">取消</button>
                             </div>
                         </div>
                         <div class="subtitle-text">
@@ -558,8 +604,75 @@
             // 保存字幕数据到全局变量
             window.currentSubtitles = subtitles;
             
+            // 添加事件监听器
+            addSubtitleEventListeners();
+            
             // 更新视频播放器的字幕显示
             updateVideoSubtitles(subtitles);
+        }
+
+        // 添加事件监听器函数
+        function addSubtitleEventListeners() {
+            // 序号点击事件
+            document.querySelectorAll('.sequence-number').forEach(number => {
+                number.addEventListener('click', function() {
+                    const time = parseFloat(this.dataset.time);
+                    const videoPlayer = document.getElementById('videoPlayer');
+                    if (videoPlayer) {
+                        videoPlayer.currentTime = time;
+                        videoPlayer.play().catch(e => console.log('播放失败:', e));
+                    }
+                });
+            });
+
+            // 编辑按钮事件
+            document.querySelectorAll('.subtitle-item').forEach(item => {
+                const editBtn = item.querySelector('.edit-btn');
+                const saveBtn = item.querySelector('.save-btn');
+                const cancelBtn = item.querySelector('.cancel-btn');
+                const textDiv = item.querySelector('.original-text');
+                let originalContent = '';
+
+                editBtn.addEventListener('click', () => {
+                    originalContent = textDiv.textContent;
+                    textDiv.contentEditable = true;
+                    textDiv.focus();
+                    editBtn.style.display = 'none';
+                    saveBtn.style.display = 'inline-block';
+                    cancelBtn.style.display = 'inline-block';
+                    textDiv.classList.add('editing');
+                });
+
+                saveBtn.addEventListener('click', async () => {
+                    const index = parseInt(item.dataset.index);
+                    const newText = textDiv.textContent.trim();
+                    
+                    try {
+                        await updateSubtitleText(index, newText);
+                        window.currentSubtitles[index].text = newText;
+                        textDiv.contentEditable = false;
+                        editBtn.style.display = 'inline-block';
+                        saveBtn.style.display = 'none';
+                        cancelBtn.style.display = 'none';
+                        textDiv.classList.remove('editing');
+                        originalContent = newText;
+                        showMessage('成功', '字幕更新成功');
+                    } catch (error) {
+                        console.error('更新字幕失败:', error);
+                        textDiv.textContent = originalContent;
+                        showMessage('错误', '更新字幕失败: ' + error.message);
+                    }
+                });
+
+                cancelBtn.addEventListener('click', () => {
+                    textDiv.textContent = originalContent;
+                    textDiv.contentEditable = false;
+                    editBtn.style.display = 'inline-block';
+                    saveBtn.style.display = 'none';
+                    cancelBtn.style.display = 'none';
+                    textDiv.classList.remove('editing');
+                });
+            });
         }
 
         // 添加字幕播放功能

@@ -12,9 +12,10 @@ STATIC_DIR = Path("static")
 MERGED_DIR = Path("merged")
 SUBTITLED_VIDEO_DIR = Path("subtitled_videos")
 TEMP_DIR = Path("temp")
+MODELS_DIR = Path("models")
 
 # 创建必要的目录
-DIRS = [UPLOAD_DIR, AUDIO_DIR, SUBTITLE_DIR, STATIC_DIR, MERGED_DIR, SUBTITLED_VIDEO_DIR, TEMP_DIR]
+DIRS = [UPLOAD_DIR, AUDIO_DIR, SUBTITLE_DIR, STATIC_DIR, MERGED_DIR, SUBTITLED_VIDEO_DIR, TEMP_DIR, MODELS_DIR]
 
 # Azure配置
 AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY")
@@ -60,3 +61,15 @@ SUPPORTED_VOICES = {
         {"name": "ja-JP-DaichiNeural", "gender": "Male", "description": "Daichi - Friendly and natural"}
     ]
 }
+
+# Whisper 模型配置
+WHISPER_MODELS = {
+    "tiny": {"size": "74 MB", "description": "最小模型，速度最快，精度最低"},
+    "base": {"size": "142 MB", "description": "小型模型，速度较快，精度一般"},
+    "small": {"size": "466 MB", "description": "中型模型，速度和精度均衡"},
+    "medium": {"size": "1.5 GB", "description": "大型模型，精度较高，速度较慢"},
+    "large": {"size": "2.9 GB", "description": "最大模型，精度最高，速度最慢"}
+}
+
+WHISPER_MODEL_SIZE = "base"  # 默认使用 base 模型
+WHISPER_MODEL_PATH = MODELS_DIR / f"whisper-{WHISPER_MODEL_SIZE}.pt"

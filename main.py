@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import math
 import asyncio
+import zipfile
 
 from modules import (
     config, 
@@ -66,8 +67,31 @@ async def extract_audio_endpoint(file_id: str):
     return await audio.extract_audio(file_id)
 
 @app.post("/generate-subtitles/{file_id}")
-async def generate_subtitles_endpoint(file_id: str, language: str = "zh-CN"):
-    return await subtitles.generate_subtitles(file_id, language)
+async def generate_subtitles_endpoint(
+    file_id: str, 
+    language: str = "zh-CN",
+    model: str = "whisper-tiny"
+):
+    print(f"生成字幕请求 - 文件: {file_id}")
+    print(f"请求参数 - 语言: {language}, 模型: {model}")
+    
+    use_whisper = model.startswith("whisper-")
+    whisper_size = model.split("-")[1] if use_whisper else None
+    
+    print(f"处理后的参数 - 使用Whisper: {use_whisper}, 模型大小: {whisper_size}")
+    
+    try:
+        result = await subtitles.generate_subtitles(
+            file_id, 
+            language, 
+            use_whisper=use_whisper,
+            whisper_model_size=whisper_size
+        )
+        print("字幕生成成功")
+        return result
+    except Exception as e:
+        print(f"字幕生成失败: {str(e)}")
+        raise
 
 @app.post("/translate-subtitles/{file_id}")
 async def translate_subtitles_endpoint(
@@ -124,7 +148,7 @@ async def update_subtitles_endpoint(file_id: str, data: dict):
 @app.post("/update-subtitle")
 async def update_single_subtitle(request: Request):
     data = await request.json()
-    return await subtitles.update_subtitle(
+    return await subtitles.update_single_subtitle(
         data.get("file_id"), 
         data.get("index"), 
         data.get("text")
@@ -137,3 +161,37 @@ async def merge_bilingual_subtitles_endpoint(
     target_language: str
 ):
     return await subtitles.merge_bilingual_subtitles(file_id, source_language, target_language)
+
+@app.get("/export-subtitles/{file_id}")
+async def export_subtitles_endpoint(
+    file_id: str,
+    target_language: str = None
+):
+    """导出字幕为SRT格式"""
+    result = await subtitles.save_subtitles_as_srt(file_id, target_language)
+    
+    # 如果只有一个文件，直接返回
+    if len(result["files"]) == 1:
+        srt_file = result["files"][0]
+        return FileResponse(
+            path=srt_file["file_path"],
+            filename=srt_file["filename"],
+            media_type="text/srt"
+        )
+    
+    # 如果有多个文件，创建zip文件
+    zip_path = TEMP_DIR / f"{file_id}_subtitles.zip"
+    with zipfile.ZipFile(zip_path, 'w') as zipf:
+        for srt_file in result["files"]:
+            zipf.write(
+                srt_file["file_path"], 
+                srt_file["filename"]
+            )
+    
+    # 返回zip文件
+    return FileResponse(
+        path=zip_path,
+        filename=f"{file_id}_subtitles.zip",
+        media_type="application/zip"
+    )
+

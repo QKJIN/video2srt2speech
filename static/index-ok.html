@@ -320,7 +320,7 @@
         </div>
     </div>
 
-    <!-- 可拖动分线 -->
+    <!-- 可拖动分割线 -->
     <div class="divider" id="divider"></div>
 
     <!-- 右侧主内容区 - 字幕处理 -->
@@ -359,19 +359,6 @@
                     <option value="">请先选择目标语言</option>
                 </select>
             </div>
-            <div class="language-control-item">
-                <label for="subtitleModel" class="form-label">字幕模型</label>
-                <select class="form-select" id="subtitleModel">
-                    <optgroup label="Whisper (本地)">
-                        <option value="whisper-tiny" selected>Whisper Tiny (74MB)</option>
-                        <option value="whisper-base">Whisper Base (142MB)</option>
-                        <option value="whisper-small">Whisper Small (466MB)</option>
-                        <option value="whisper-medium">Whisper Medium (1.5GB)</option>
-                        <option value="whisper-large">Whisper Large (2.9GB)</option>
-                    </optgroup>
-                    <option value="azure">Azure Speech (在线)</option>
-                </select>
-            </div>
         </div>
 
         <div class="btn-toolbar">
@@ -380,9 +367,7 @@
             <button id="generateSpeechBtn" class="btn btn-success me-2">生成语音</button>
             <button id="mergeAudioBtn" class="btn btn-warning me-2">合并语音</button>
             <button id="burnSubtitlesBtn" class="btn btn-danger me-2">生成带字幕视频</button>
-            <button id="saveSubtitlesBtn" class="btn btn-primary" title="下载字幕文件">
-                <i class="fas fa-download"></i> 下载字幕
-            </button>
+            <button id="saveSubtitlesBtn" class="btn btn-secondary">保存字幕</button>
         </div>
 
         <div id="mergedAudioContainer" class="mb-3" style="display: none;">
@@ -413,7 +398,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/static/main.js"></script>
+    <script src="/static/main-ok.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const divider = document.getElementById('divider');
@@ -463,150 +448,6 @@
                 }
             });
         });
-
-        // 修改保存字幕按钮的处理函数
-        async function handleSaveSubtitles() {
-            const fileId = currentFileId;
-            if (!fileId) {
-                showMessage('错误', '没有可用的字幕文件');
-                return;
-            }
-
-            try {
-                // 构建下载URL
-                let url = `/export-subtitles/${fileId}`;
-                // 获取当前选择的目标语言
-                const targetLang = document.getElementById('targetLanguage').value;
-                if (targetLang) {
-                    url += `?target_language=${targetLang}`;
-                }
-
-                // 创建一个隐藏的 <a> 标签来触发下载
-                const link = document.createElement('a');
-                link.href = url;
-                // 让浏览器处理文件名（服务器会在 Content-Disposition 中指定）
-                link.download = '';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                showMessage('成功', '字幕文件下载已开始');
-            } catch (error) {
-                console.error('导出字幕失败:', error);
-                showMessage('错误', '导出字幕失败: ' + error.message);
-            }
-        }
-
-        // 修改按钮的事件监听器
-        document.getElementById('saveSubtitlesBtn').onclick = handleSaveSubtitles;
-
-        // 修改 updateSubtitleEditor 函数
-        function updateSubtitleEditor(subtitles) {
-            const editor = document.getElementById('subtitleEditor');
-            editor.innerHTML = '';  // 清空现有内容
-
-            let html = '<div class="subtitle-list">';
-            
-            for (let i = 0; i < subtitles.length; i++) {
-                const subtitle = subtitles[i];
-                if (!subtitle || typeof subtitle.start === 'undefined' || typeof subtitle.duration === 'undefined') {
-                    console.error('无效的字幕条目:', subtitle);
-                    continue;
-                }
-
-                const startTime = formatTime(parseFloat(subtitle.start));
-                const endTime = formatTime(parseFloat(subtitle.start) + parseFloat(subtitle.duration));
-                const originalText = subtitle.text || '';
-                const sequenceNumber = (i + 1).toString().padStart(3, '0');
-                
-                html += `
-                    <div class="subtitle-item" data-index="${i}" data-start="${subtitle.start}">
-                        <div class="subtitle-header">
-                            <div class="subtitle-info">
-                                <span class="sequence-number" data-time="${subtitle.start}">${sequenceNumber}</span>
-                                <span class="subtitle-time">${startTime} - ${endTime}</span>
-                            </div>
-                            <div class="subtitle-controls">
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="playSubtitle(${i})">
-                                    <i class="fas fa-play"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-success me-1" onclick="generateSingleSpeech(${i})">
-                                    <i class="fas fa-volume-up"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-info" onclick="editSubtitle(${i})">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="subtitle-text">
-                            <div class="original-text" contenteditable="false">${originalText}</div>
-                            <div class="translated-text"></div>
-                        </div>
-                        <div class="audio-player" style="display: none;">
-                            <audio controls class="subtitle-audio">
-                                <source src="" type="audio/mpeg">
-                                您的浏览器不支持音频播放。
-                            </audio>
-                        </div>
-                    </div>
-                `;
-            }
-            html += '</div>';
-            
-            editor.innerHTML = html;
-            
-            // 保存字幕数据到全局变量
-            window.currentSubtitles = subtitles;
-            
-            // 更新视频播放器的字幕显示
-            updateVideoSubtitles(subtitles);
-        }
-
-        // 添加字幕播放功能
-        function playSubtitle(index) {
-            const subtitle = window.currentSubtitles[index];
-            if (!subtitle) return;
-            
-            const video = document.getElementById('videoPlayer');
-            if (video) {
-                video.currentTime = subtitle.start;
-                video.play();
-            }
-        }
-
-        // 更新视频播放器的字幕显示
-        function updateVideoSubtitles(subtitles) {
-            const overlay = document.getElementById('subtitleOverlay');
-            if (!overlay) return;
-            
-            const video = document.getElementById('videoPlayer');
-            if (!video) return;
-            
-            // 清除现有的时间更新监听器
-            if (window.subtitleUpdateInterval) {
-                clearInterval(window.subtitleUpdateInterval);
-            }
-            
-            // 设置新的时间更新监听器
-            window.subtitleUpdateInterval = setInterval(() => {
-                const currentTime = video.currentTime;
-                const currentSubtitle = subtitles.find(s => 
-                    currentTime >= s.start && currentTime <= (s.start + s.duration)
-                );
-                
-                overlay.textContent = currentSubtitle ? currentSubtitle.text : '';
-            }, 100);
-        }
-
-        // 添加时间格式化函数
-        function formatTime(seconds) {
-            const pad = num => num.toString().padStart(2, '0');
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            const secs = Math.floor(seconds % 60);
-            const ms = Math.floor((seconds % 1) * 1000);
-            return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${ms.toString().padStart(3, '0')}`;
-        }
     </script>
 </body>
 </html>
