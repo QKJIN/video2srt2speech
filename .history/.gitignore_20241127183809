@@ -2,10 +2,10 @@
 uploads/
 audio/
 subtitles/
+static/
 merged/
 subtitled_videos/
 temp/
-models/
 
 # Python
 __pycache__/

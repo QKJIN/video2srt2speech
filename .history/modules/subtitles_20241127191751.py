@@ -27,61 +27,30 @@ async def update_subtitle(file_id: str, data: dict):
         if not subtitle_file.exists():
             raise HTTPException(404, "字幕文件不存在")
 
-        try:
-            # 读取字幕文件
-            async with aiofiles.open(subtitle_file, "r", encoding="utf-8") as f:
-                content = await f.read()
-                subtitles = json.loads(content)
+        async with aiofiles.open(subtitle_file, "r", encoding="utf-8") as f:
+            content = await f.read()
+            subtitles = json.loads(content)
 
-            # 检查索引是否有效
-            index = data.get("index")
-            new_text = data.get("text")
-            
-            if index is None or new_text is None:
-                raise HTTPException(400, "缺少必要的参数")
-            
-            if not isinstance(subtitles, list):
-                raise HTTPException(400, "无效的字幕文件格式")
-            
-            if index < 0 or index >= len(subtitles):
-                raise HTTPException(400, "无效的字幕索引")
-
-            # 更新字幕文本
-            subtitles[index]["text"] = new_text
-
-            # 写入更新后的字幕
-            async with aiofiles.open(subtitle_file, "w", encoding="utf-8") as f:
-                await f.write(json.dumps(subtitles, ensure_ascii=False, indent=2))
-
-            return {
-                "status": "success",
-                "message": "字幕更新成功",
-                "index": index,
-                "text": new_text
-            }
-
-        except json.JSONDecodeError:
-            raise HTTPException(500, "字幕文件格式错误")
-        except IOError as e:
-            raise HTTPException(500, f"文件读写错误: {str(e)}")
+        # 检查索引是否有效
+        index = data.get("index")
+        new_text = data.get("text")
         
-    except HTTPException:
-        raise
+        if not isinstance(subtitles, list) or index >= len(subtitles):
+            raise HTTPException(400, "无效的字幕索引")
+
+        # 更新字幕文本
+        subtitles[index]["text"] = new_text
+
+        async with aiofiles.open(subtitle_file, "w", encoding="utf-8") as f:
+            await f.write(json.dumps(subtitles, ensure_ascii=False, indent=2))
+
+        return {"status": "success"}
     except Exception as e:
-        print(f"更新字幕失败: {str(e)}")
         raise HTTPException(500, f"更新字幕失败: {str(e)}")
 
 async def update_single_subtitle(file_id: str, index: int, new_text: str):
     """更新单个字幕"""
-    if not isinstance(index, int):
-        raise HTTPException(400, "字幕索引必须是整数")
-    if not isinstance(new_text, str):
-        raise HTTPException(400, "字幕文本必须是字符串")
-        
-    return await update_subtitle(file_id, {
-        "index": index,
-        "text": new_text
-    })
+    return await update_subtitle(file_id, {"index": index, "text": new_text})
 
 async def generate_subtitles(
     file_id: str, 
@@ -296,7 +265,7 @@ async def generate_subtitles(
             raise HTTPException(500, error_msg)
 
     except Exception as e:
-        error_msg = f"���成字幕时出错: {str(e)}"
+        error_msg = f"生成字幕时出错: {str(e)}"
         print(error_msg)
         await websocket.send_message(file_id, {
             "type": "error",
@@ -347,13 +316,8 @@ async def merge_bilingual_subtitles(file_id: str, source_language: str, target_l
 
 async def save_subtitles_as_srt(file_id: str, language: str = None):
     """导出字幕为SRT格式"""
-    temp_files = []  # 用于跟踪创建的临时文件
-    
     try:
         file_id_without_ext = os.path.splitext(file_id)[0]
-        
-        # 确保临时目录存在
-        TEMP_DIR.mkdir(exist_ok=True)
         
         # 确定要导出的字幕文件
         subtitle_files = []
@@ -372,46 +336,26 @@ async def save_subtitles_as_srt(file_id: str, language: str = None):
         if not subtitle_files:
             raise HTTPException(404, "未找到字幕文件")
         
-        srt_files = []
         # 转换并返回所有字幕文件
+        srt_files = []
         for lang, subtitle_file in subtitle_files:
-            try:
-                # 读取JSON字幕
-                with open(subtitle_file, 'r', encoding='utf-8') as f:
-                    subtitles = json.load(f)
-                
-                # 转换为SRT格式
-                srt_content = convert_to_srt(subtitles)
-                
-                # 创建临时SRT文件
-                temp_srt = TEMP_DIR / f"{file_id_without_ext}_{lang}.srt"
-                temp_files.append(temp_srt)  # 添加到跟踪列表
-                
-                # 写入内容
-                with open(temp_srt, 'w', encoding='utf-8') as f:
-                    f.write(srt_content)
-                
-                # 验证文件是否成功创建
-                if not temp_srt.exists():
-                    raise HTTPException(500, f"创建SRT文件失败: {temp_srt}")
-                
-                srt_files.append({
-                    "language": lang,
-                    "file_path": str(temp_srt),
-                    "filename": f"{file_id_without_ext}_{lang}.srt"
-                })
-                
-            except Exception as e:
-                print(f"处理字幕文件失败: {str(e)}")
-                raise
-        
-        if not srt_files:
-            raise HTTPException(500, "未能创建任何SRT文件")
-        
-        # 确保所有文件都存在
-        for srt_file in srt_files:
-            if not Path(srt_file["file_path"]).exists():
-                raise HTTPException(500, f"SRT文件不存在: {srt_file['file_path']}")
+            # 读取JSON字幕
+            with open(subtitle_file, 'r', encoding='utf-8') as f:
+                subtitles = json.load(f)
+            
+            # 转换为SRT格式
+            srt_content = convert_to_srt(subtitles)
+            
+            # 创建临时SRT文件
+            temp_srt = TEMP_DIR / f"{file_id_without_ext}_{lang}.srt"
+            with open(temp_srt, 'w', encoding='utf-8') as f:
+                f.write(srt_content)
+            
+            srt_files.append({
+                "language": lang,
+                "file_path": str(temp_srt),
+                "filename": f"{file_id_without_ext}_{lang}.srt"
+            })
         
         return {
             "status": "success",
@@ -419,14 +363,4 @@ async def save_subtitles_as_srt(file_id: str, language: str = None):
         }
         
     except Exception as e:
-        # 清理所有临时文件
-        for temp_file in temp_files:
-            try:
-                if temp_file.exists():
-                    temp_file.unlink()
-            except Exception as cleanup_error:
-                print(f"清理临时文件失败: {cleanup_error}")
-        
-        if isinstance(e, HTTPException):
-            raise
         raise HTTPException(500, f"导出SRT字幕失败: {str(e)}")

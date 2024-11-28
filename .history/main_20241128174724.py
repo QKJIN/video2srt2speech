@@ -174,107 +174,43 @@ async def export_subtitles_endpoint(
         # 如果只有一个文件，直接返回
         if len(result["files"]) == 1:
             srt_file = result["files"][0]
-            srt_path = Path(srt_file["file_path"])
-            
-            # 确保文件存在
-            if not srt_path.exists():
-                raise HTTPException(500, f"SRT文件不存在: {srt_path}")
-            
-            try:
-                return FileResponse(
-                    path=str(srt_path),  # 转换为字符串
-                    filename=srt_file["filename"],
-                    media_type="text/srt"
-                )
-            finally:
-                # 延迟清理文件
-                async def cleanup():
-                    await asyncio.sleep(1)  # 等待文件发送完成
-                    try:
-                        if srt_path.exists():
-                            srt_path.unlink()
-                    except Exception as e:
-                        print(f"清理文件失败: {e}")
-                
-                asyncio.create_task(cleanup())
+            return FileResponse(
+                path=srt_file["file_path"],
+                filename=srt_file["filename"],
+                media_type="text/srt"
+            )
         
         # 如果有多个文件，创建zip文件
         zip_path = TEMP_DIR / f"{file_id}_subtitles.zip"
-        
-        # 确保临时目录存在
-        TEMP_DIR.mkdir(exist_ok=True)
-        
-        # 创建 zip 文件
         try:
             with zipfile.ZipFile(zip_path, 'w') as zipf:
                 for srt_file in result["files"]:
-                    srt_path = Path(srt_file["file_path"])
-                    if srt_path.exists():
-                        zipf.write(
-                            srt_path, 
-                            srt_file["filename"]
-                        )
+                    zipf.write(
+                        srt_file["file_path"], 
+                        srt_file["filename"]
+                    )
             
-            # 确保 zip 文件已经创建
-            if not zip_path.exists():
-                raise HTTPException(500, "创建 ZIP 文件失败")
-            
-            # 返回 zip 文件
-            try:
-                return FileResponse(
-                    path=str(zip_path),
-                    filename=f"{file_id}_subtitles.zip",
-                    media_type="application/zip"
-                )
-            finally:
-                # 延迟清理所有文件
-                async def cleanup():
-                    await asyncio.sleep(1)  # 等待文件发送完成
-                    try:
-                        # 清理 SRT 文件
-                        for srt_file in result["files"]:
-                            srt_path = Path(srt_file["file_path"])
-                            if srt_path.exists():
-                                srt_path.unlink()
-                        
-                        # 清理 ZIP 文件
-                        if zip_path.exists():
-                            zip_path.unlink()
-                    except Exception as e:
-                        print(f"清理文件失败: {e}")
-                
-                asyncio.create_task(cleanup())
-                
-        except Exception as e:
-            # 清理所有临时文件
+            # 返回zip文件
+            return FileResponse(
+                path=zip_path,
+                filename=f"{file_id}_subtitles.zip",
+                media_type="application/zip"
+            )
+        finally:
+            # 清理临时文件
             for srt_file in result["files"]:
                 try:
                     Path(srt_file["file_path"]).unlink(missing_ok=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"清理临时文件失败: {str(e)}")
             
-            if zip_path.exists():
-                try:
-                    zip_path.unlink()
-                except Exception:
-                    pass
-            raise
+            # 清理zip文件
+            try:
+                zip_path.unlink(missing_ok=True)
+            except Exception as e:
+                print(f"清理zip文件失败: {str(e)}")
                 
     except Exception as e:
-        # 确保出错时也清理文件
-        if 'result' in locals():
-            for srt_file in result["files"]:
-                try:
-                    Path(srt_file["file_path"]).unlink(missing_ok=True)
-                except Exception:
-                    pass
-        
-        if 'zip_path' in locals() and zip_path.exists():
-            try:
-                zip_path.unlink()
-            except Exception:
-                pass
-            
         raise HTTPException(
             status_code=500,
             detail=f"导出字幕失败: {str(e)}"

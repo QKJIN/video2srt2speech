@@ -204,8 +204,8 @@ async def export_subtitles_endpoint(
         # 确保临时目录存在
         TEMP_DIR.mkdir(exist_ok=True)
         
-        # 创建 zip 文件
         try:
+            # 创建 zip 文件
             with zipfile.ZipFile(zip_path, 'w') as zipf:
                 for srt_file in result["files"]:
                     srt_path = Path(srt_file["file_path"])
@@ -219,8 +219,8 @@ async def export_subtitles_endpoint(
             if not zip_path.exists():
                 raise HTTPException(500, "创建 ZIP 文件失败")
             
-            # 返回 zip 文件
             try:
+                # 返回 zip 文件
                 return FileResponse(
                     path=str(zip_path),
                     filename=f"{file_id}_subtitles.zip",
@@ -244,21 +244,6 @@ async def export_subtitles_endpoint(
                         print(f"清理文件失败: {e}")
                 
                 asyncio.create_task(cleanup())
-                
-        except Exception as e:
-            # 清理所有临时文件
-            for srt_file in result["files"]:
-                try:
-                    Path(srt_file["file_path"]).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            
-            if zip_path.exists():
-                try:
-                    zip_path.unlink()
-                except Exception:
-                    pass
-            raise
                 
     except Exception as e:
         # 确保出错时也清理文件

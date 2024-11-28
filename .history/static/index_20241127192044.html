@@ -320,7 +320,7 @@
         </div>
     </div>
 
-    <!-- 可拖动分线 -->
+    <!-- 可拖动分割线 -->
     <div class="divider" id="divider"></div>
 
     <!-- 右侧主内容区 - 字幕处理 -->
@@ -362,14 +362,14 @@
             <div class="language-control-item">
                 <label for="subtitleModel" class="form-label">字幕模型</label>
                 <select class="form-select" id="subtitleModel">
+                    <option value="azure">Azure Speech</option>
                     <optgroup label="Whisper (本地)">
-                        <option value="whisper-tiny" selected>Whisper Tiny (74MB)</option>
+                        <option value="whisper-tiny">Whisper Tiny (74MB)</option>
                         <option value="whisper-base">Whisper Base (142MB)</option>
                         <option value="whisper-small">Whisper Small (466MB)</option>
                         <option value="whisper-medium">Whisper Medium (1.5GB)</option>
                         <option value="whisper-large">Whisper Large (2.9GB)</option>
                     </optgroup>
-                    <option value="azure">Azure Speech (在线)</option>
                 </select>
             </div>
         </div>
@@ -465,10 +465,7 @@
         });
 
         // 修改保存字幕按钮的处理函数
-        async function downloadSubtitles(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
+        async function handleSaveSubtitles() {
             const fileId = currentFileId;
             if (!fileId) {
                 showMessage('错误', '没有可用的字幕文件');
@@ -476,186 +473,117 @@
             }
 
             try {
-                showLoading();  // 添加加载提示
-                
                 // 构建下载URL
-                let downloadUrl = `/export-subtitles/${fileId}`;
+                let url = `/export-subtitles/${fileId}`;
+                // 获取当前选择的目标语言
                 const targetLang = document.getElementById('targetLanguage').value;
                 if (targetLang) {
-                    downloadUrl += `?target_language=${targetLang}`;
+                    url += `?target_language=${targetLang}`;
                 }
 
-                // 使用 fetch 下载文件
-                const response = await fetch(downloadUrl, {
-                    method: 'GET',  // 明确指定 GET 方法
-                    headers: {
-                        'Accept': 'application/octet-stream'  // 指定接受二进制文件
-                    }
-                });
+                // 创建一个隐藏的 <a> 标签来触发下载
+                const link = document.createElement('a');
+                link.href = url;
+                // 让浏览器处理文件名（服务器会在 Content-Disposition 中指定）
+                link.download = '';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
 
-                if (!response.ok) {
-                    throw new Error(await response.text());
-                }
-
-                // 获取文件 blob
-                const blob = await response.blob();
-                
-                // 获取文件名
-                const contentDisposition = response.headers.get('content-disposition');
-                let filename = fileId + '_subtitles.srt';
-                if (contentDisposition) {
-                    const matches = /filename=(.+)/.exec(contentDisposition);
-                    if (matches && matches[1]) {
-                        filename = matches[1].replace(/["']/g, '');
-                    }
-                }
-
-                // 创建并触发下载
-                const blobUrl = window.URL.createObjectURL(blob);
-                const downloadLink = document.createElement('a');
-                downloadLink.style.display = 'none';
-                downloadLink.href = blobUrl;
-                downloadLink.download = filename;
-                
-                // 添加到文档并触发下载
-                document.body.appendChild(downloadLink);
-                downloadLink.click();
-                
-                // 清理
-                setTimeout(() => {
-                    document.body.removeChild(downloadLink);
-                    window.URL.revokeObjectURL(blobUrl);
-                }, 100);
-
-                showMessage('成功', '字幕文件下载开始');
+                showMessage('成功', '字幕文件下载已开始');
             } catch (error) {
-                console.error('下载字幕失败:', error);
-                showMessage('错误', '下载字幕失败: ' + error.message);
-            } finally {
-                hideLoading();  // 隐藏加载提示
+                console.error('导出字幕失败:', error);
+                showMessage('错误', '导出字幕失败: ' + error.message);
             }
         }
 
         // 修改按钮的事件监听器
-        const saveSubtitlesBtn = document.getElementById('saveSubtitlesBtn');
-        if (saveSubtitlesBtn) {
-            // 移除所有现有的事件监听器
-            const newBtn = saveSubtitlesBtn.cloneNode(true);
-            saveSubtitlesBtn.parentNode.replaceChild(newBtn, saveSubtitlesBtn);
-            
-            // 添加新的事件监听器
-            newBtn.addEventListener('click', downloadSubtitles, { capture: true });
-        }
+        document.getElementById('saveSubtitlesBtn').onclick = handleSaveSubtitles;
 
-        // 修改 updateSubtitleEditor 函数
+        // 修改生成字幕按钮的处理函数
+        document.getElementById('generateSubtitlesBtn').onclick = async function() {
+            if (!currentFileId) {
+                showMessage('错误', '请先上传视频文件');
+                return;
+            }
+
+            try {
+                showLoading();
+                const sourceLanguage = document.getElementById('sourceLanguage').value;
+                const modelSelect = document.getElementById('subtitleModel');
+                const model = modelSelect.value;
+                
+                console.log('使用模型:', model);  // 调试日志
+                
+                // 构建 URL 参数
+                const params = new URLSearchParams({
+                    language: sourceLanguage,
+                    model: model
+                });
+                
+                const url = `/generate-subtitles/${currentFileId}?${params.toString()}`;
+                console.log('请求 URL:', url);  // 调试日志
+                
+                const response = await fetch(url, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('服务器错误:', errorText);
+                    throw new Error(errorText);
+                }
+
+                const subtitles = await response.json();
+                console.log('收到字幕数据:', subtitles);  // 调试日志
+
+                if (Array.isArray(subtitles) && subtitles.length > 0) {
+                    updateSubtitleEditor(subtitles);
+                    showMessage('成功', `成功生成 ${subtitles.length} 条字幕`);
+                } else {
+                    throw new Error('未收到有效的字幕数据');
+                }
+
+            } catch (error) {
+                console.error('生成字幕失败:', error);
+                showMessage('错误', '生成字幕失败: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        };
+
+        // 添加或修改 updateSubtitleEditor 函数
         function updateSubtitleEditor(subtitles) {
             const editor = document.getElementById('subtitleEditor');
             editor.innerHTML = '';  // 清空现有内容
 
-            let html = '<div class="subtitle-list">';
-            
-            for (let i = 0; i < subtitles.length; i++) {
-                const subtitle = subtitles[i];
-                if (!subtitle || typeof subtitle.start === 'undefined' || typeof subtitle.duration === 'undefined') {
-                    console.error('无效的字幕条目:', subtitle);
-                    continue;
-                }
-
-                const startTime = formatTime(parseFloat(subtitle.start));
-                const endTime = formatTime(parseFloat(subtitle.start) + parseFloat(subtitle.duration));
-                const originalText = subtitle.text || '';
-                const sequenceNumber = (i + 1).toString().padStart(3, '0');
+            subtitles.forEach((subtitle, index) => {
+                const subtitleDiv = document.createElement('div');
+                subtitleDiv.className = 'subtitle-item';
                 
-                html += `
-                    <div class="subtitle-item" data-index="${i}" data-start="${subtitle.start}">
-                        <div class="subtitle-header">
-                            <div class="subtitle-info">
-                                <span class="sequence-number" data-time="${subtitle.start}">${sequenceNumber}</span>
-                                <span class="subtitle-time">${startTime} - ${endTime}</span>
-                            </div>
-                            <div class="subtitle-controls">
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="playSubtitle(${i})">
-                                    <i class="fas fa-play"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-success me-1" onclick="generateSingleSpeech(${i})">
-                                    <i class="fas fa-volume-up"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-info edit-btn" data-index="${i}">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="subtitle-text">
-                            <div class="original-text" data-index="${i}" contenteditable="false">${originalText}</div>
-                            <div class="translated-text"></div>
-                        </div>
-                        <div class="audio-player" style="display: none;">
-                            <audio controls class="subtitle-audio">
-                                <source src="" type="audio/mpeg">
-                                您的浏览器不支持音频播放。
-                            </audio>
+                const startTime = formatTime(subtitle.start);
+                const endTime = formatTime(subtitle.start + subtitle.duration);
+                
+                subtitleDiv.innerHTML = `
+                    <div class="subtitle-header">
+                        <span class="subtitle-index">#${index + 1}</span>
+                        <span class="subtitle-time">${startTime} --> ${endTime}</span>
+                        <div class="subtitle-controls">
+                            <button class="btn btn-sm btn-outline-primary edit-btn">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-success play-btn">
+                                <i class="fas fa-play"></i>
+                            </button>
                         </div>
                     </div>
+                    <div class="subtitle-text" contenteditable="true">${subtitle.text}</div>
                 `;
-            }
-            html += '</div>';
-            
-            editor.innerHTML = html;
-            
-            // 保存字幕数据到全局变量
-            window.currentSubtitles = subtitles;
-            
-            // 添加编辑按钮事件监听器
-            document.querySelectorAll('.edit-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const index = parseInt(btn.dataset.index);
-                    const textElement = document.querySelector(`.original-text[data-index="${index}"]`);
-                    if (textElement) {
-                        startEditing(textElement);
-                    }
-                });
-            });
-            
-            // 更新视频播放器的字幕显示
-            updateVideoSubtitles(subtitles);
-        }
-
-        // 添加字幕播放功能
-        function playSubtitle(index) {
-            const subtitle = window.currentSubtitles[index];
-            if (!subtitle) return;
-            
-            const video = document.getElementById('videoPlayer');
-            if (video) {
-                video.currentTime = subtitle.start;
-                video.play();
-            }
-        }
-
-        // 更新视频播放器的字幕显示
-        function updateVideoSubtitles(subtitles) {
-            const overlay = document.getElementById('subtitleOverlay');
-            if (!overlay) return;
-            
-            const video = document.getElementById('videoPlayer');
-            if (!video) return;
-            
-            // 清除现有的时间更新监听器
-            if (window.subtitleUpdateInterval) {
-                clearInterval(window.subtitleUpdateInterval);
-            }
-            
-            // 设置新的时间更新监听器
-            window.subtitleUpdateInterval = setInterval(() => {
-                const currentTime = video.currentTime;
-                const currentSubtitle = subtitles.find(s => 
-                    currentTime >= s.start && currentTime <= (s.start + s.duration)
-                );
                 
-                overlay.textContent = currentSubtitle ? currentSubtitle.text : '';
-            }, 100);
+                editor.appendChild(subtitleDiv);
+            });
+
+            console.log('字幕编辑器已更新');  // 调试日志
         }
 
         // 添加时间格式化函数

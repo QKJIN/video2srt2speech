@@ -465,7 +465,8 @@
         });
 
         // 修改保存字幕按钮的处理函数
-        async function downloadSubtitles(e) {
+        async function handleSaveSubtitles(e) {
+            // 阻止事件冒泡和默认行为
             e.preventDefault();
             e.stopPropagation();
             
@@ -476,23 +477,16 @@
             }
 
             try {
-                showLoading();  // 添加加载提示
-                
                 // 构建下载URL
                 let downloadUrl = `/export-subtitles/${fileId}`;
+                // 获取当前选择的目标语言
                 const targetLang = document.getElementById('targetLanguage').value;
                 if (targetLang) {
                     downloadUrl += `?target_language=${targetLang}`;
                 }
 
                 // 使用 fetch 下载文件
-                const response = await fetch(downloadUrl, {
-                    method: 'GET',  // 明确指定 GET 方法
-                    headers: {
-                        'Accept': 'application/octet-stream'  // 指定接受二进制文件
-                    }
-                });
-
+                const response = await fetch(downloadUrl);
                 if (!response.ok) {
                     throw new Error(await response.text());
                 }
@@ -500,7 +494,7 @@
                 // 获取文件 blob
                 const blob = await response.blob();
                 
-                // 获取文件名
+                // 从响应头获取文件名
                 const contentDisposition = response.headers.get('content-disposition');
                 let filename = fileId + '_subtitles.srt';
                 if (contentDisposition) {
@@ -510,41 +504,33 @@
                     }
                 }
 
-                // 创建并触发下载
+                // 创建下载链接
                 const blobUrl = window.URL.createObjectURL(blob);
-                const downloadLink = document.createElement('a');
-                downloadLink.style.display = 'none';
-                downloadLink.href = blobUrl;
-                downloadLink.download = filename;
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = filename;
+                link.style.display = 'none';
                 
-                // 添加到文档并触发下载
-                document.body.appendChild(downloadLink);
-                downloadLink.click();
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
                 
-                // 清理
+                // 清理 URL 对象
                 setTimeout(() => {
-                    document.body.removeChild(downloadLink);
                     window.URL.revokeObjectURL(blobUrl);
                 }, 100);
 
-                showMessage('成功', '字幕文件下载开始');
+                showMessage('成功', '字幕文件下载已开始');
             } catch (error) {
-                console.error('下载字幕失败:', error);
-                showMessage('错误', '下载字幕失败: ' + error.message);
-            } finally {
-                hideLoading();  // 隐藏加载提示
+                console.error('导出字幕失败:', error);
+                showMessage('错误', '导出字幕失败: ' + error.message);
             }
         }
 
         // 修改按钮的事件监听器
         const saveSubtitlesBtn = document.getElementById('saveSubtitlesBtn');
         if (saveSubtitlesBtn) {
-            // 移除所有现有的事件监听器
-            const newBtn = saveSubtitlesBtn.cloneNode(true);
-            saveSubtitlesBtn.parentNode.replaceChild(newBtn, saveSubtitlesBtn);
-            
-            // 添加新的事件监听器
-            newBtn.addEventListener('click', downloadSubtitles, { capture: true });
+            saveSubtitlesBtn.addEventListener('click', handleSaveSubtitles);
         }
 
         // 修改 updateSubtitleEditor 函数
@@ -580,13 +566,13 @@
                                 <button class="btn btn-sm btn-outline-success me-1" onclick="generateSingleSpeech(${i})">
                                     <i class="fas fa-volume-up"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-info edit-btn" data-index="${i}">
+                                <button class="btn btn-sm btn-outline-info" onclick="editSubtitle(${i})">
                                     <i class="fas fa-edit"></i>
                                 </button>
                             </div>
                         </div>
                         <div class="subtitle-text">
-                            <div class="original-text" data-index="${i}" contenteditable="false">${originalText}</div>
+                            <div class="original-text" contenteditable="false">${originalText}</div>
                             <div class="translated-text"></div>
                         </div>
                         <div class="audio-player" style="display: none;">
@@ -604,19 +590,6 @@
             
             // 保存字幕数据到全局变量
             window.currentSubtitles = subtitles;
-            
-            // 添加编辑按钮事件监听器
-            document.querySelectorAll('.edit-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const index = parseInt(btn.dataset.index);
-                    const textElement = document.querySelector(`.original-text[data-index="${index}"]`);
-                    if (textElement) {
-                        startEditing(textElement);
-                    }
-                });
-            });
             
             // 更新视频播放器的字幕显示
             updateVideoSubtitles(subtitles);
