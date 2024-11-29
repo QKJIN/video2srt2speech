@@ -34,11 +34,11 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
 
         # 使用测试样式
         test_style = {
-            'fontSize': '48',  # 更大的字体
-            'color': '#FF0000',  # 红色
+            'fontSize': '68',  # 更大的字体
+            'color': '#ff0000',  # 红色
             'strokeColor': '#000000',  # 黑色描边
             'strokeWidth': '3',  # 更粗的描边
-            'bgColor': '#FFFF00',  # 黄色背景
+            'bgColor': '#ffff00',  # 黄色背景
             'bgOpacity': '0.8'  # 较高的不透明度
         }
 
@@ -156,7 +156,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
                 f"1,0,0,0,"  # 粗体,斜体,下划线,删除线
                 f"100,100,0,0,"  # 缩放X,缩放Y,间距,角度
                 f"1,{stroke_width:.1f},0,"  # 边框样式,边框宽度,阴影
-                f"2,10,10,10,1"  # 对齐,��边距,右边距,垂直边距,编码
+                f"2,10,10,10,1"  # 对齐,边距,右边距,垂直边距,编码
             )
             
             ass_content += style_line + "\n\n"

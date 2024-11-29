@@ -639,49 +639,36 @@ burnSubtitlesBtn.addEventListener('click', async () => {
 
     try {
         showLoading();
-        // 获取字幕样式
-        const style = {
-            fontSize: document.getElementById('subtitleFontSize').value,
-            color: document.getElementById('subtitleColor').value,
-            strokeColor: document.getElementById('subtitleStrokeColor').value,
-            strokeWidth: document.getElementById('subtitleStrokeWidth').value,
-            bgColor: document.getElementById('subtitleBgColor').value,
-            bgOpacity: document.getElementById('subtitleBgOpacity').value
+        const subtitleStyle = {
+            fontSize: parseInt(subtitleFontSize.value),
+            fontColor: subtitleColor.value,
+            backgroundColor: `${subtitleBgColor.value}${Math.round(subtitleBgOpacity.value * 255).toString(16).padStart(2, '0')}`,
+            webkitTextStroke: `${subtitleStrokeWidth.value}px ${subtitleStrokeColor.value}`,
+            textStroke: `${subtitleStrokeWidth.value}px ${subtitleStrokeColor.value}`,
+            padding: '0.2em 0.5em',
+            borderRadius: '4px',
+            maxWidth: '90%',
+            margin: '0 auto',
+            whiteSpace: 'pre-wrap',
+            wordWrap: 'break-word'
         };
 
-        const language = document.getElementById('sourceLanguage').value;
-        
-        const response = await fetch(`/burn-subtitles/${currentFileId}?language=${language}`, {
+        const response = await fetch(`/burn-subtitles/${currentFileId}?language=${targetLanguage.value}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(style)
+            body: JSON.stringify({ style: subtitleStyle })
         });
 
         if (!response.ok) {
-            throw new Error(await response.text());
+            throw new Error('生成带字幕视频失败');
         }
 
-        const result = await response.json();
-        
-        // 显示带字幕的视频
-        const subtitledVideo = document.getElementById('subtitledVideo');
-        const subtitledVideoContainer = document.getElementById('subtitledVideoContainer');
-        
-        // 添加时间戳防止缓存
-        const timestamp = new Date().getTime();
-        subtitledVideo.src = `/subtitled/${result.output_file}?t=${timestamp}`;
-        subtitledVideoContainer.style.display = 'block';
-
-        // 滚动到视频位置
-        subtitledVideoContainer.scrollIntoView({ behavior: 'smooth' });
-        
-        showMessage('成功', '字幕烧录完成');
-        
+        const data = await response.json();
+        displaySubtitledVideo(data.subtitled_video);
     } catch (error) {
-        console.error('生成带字幕视频失败:', error);
-        showMessage('错误', '生成带字幕视频失败: ' + error.message);
+        showError('生成带字幕视频失败: ' + error.message);
     } finally {
         hideLoading();
     }
@@ -1025,7 +1012,7 @@ function connectWebSocket(fileId) {
         };
 
         ws.onclose = (event) => {
-            console.log('WebSocket连接���关闭', event);
+            console.log('WebSocket连接已关闭', event);
             clearInterval(wsKeepAliveInterval);
 
             // 只有在任务未完成且不是主动关闭的情况下才尝试重连
