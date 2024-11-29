@@ -45,6 +45,7 @@ ENV/
 
 # 日志文件
 *.log
+.history/
 
 # 系统文件
 .DS_Store
