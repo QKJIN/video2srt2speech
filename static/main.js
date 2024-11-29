@@ -651,7 +651,12 @@ burnSubtitlesBtn.addEventListener('click', async () => {
             strokeColor: document.getElementById('subtitleStrokeColor').value.toLowerCase(),
             strokeWidth: document.getElementById('subtitleStrokeWidth').value,
             bgColor: document.getElementById('subtitleBgColor').value.toLowerCase(),
-            bgOpacity: document.getElementById('subtitleBgOpacity').value
+            bgOpacity: document.getElementById('subtitleBgOpacity').value,
+            // 添加背景框设置
+            boxMarginV: document.getElementById('boxMarginV').value,
+            boxMarginH: document.getElementById('boxMarginH').value,
+            boxPaddingV: document.getElementById('boxPaddingV').value,
+            boxPaddingH: document.getElementById('boxPaddingH').value
         };
 
         console.log('发送的字幕样式:', style);  // 调试日志
@@ -929,13 +934,25 @@ videoPlayer.addEventListener('timeupdate', () => {
 });
 
 // 监听样式控制变化
-[subtitleFontSize, subtitleColor, subtitleBgColor, subtitleBgOpacity, subtitleStrokeColor, subtitleStrokeWidth].forEach(
-    control => {
-        if (control) {
-            control.addEventListener('input', updateSubtitleStyle);
-        }
+const styleControls = [
+    subtitleFontSize, 
+    subtitleColor, 
+    subtitleBgColor, 
+    subtitleBgOpacity, 
+    subtitleStrokeColor, 
+    subtitleStrokeWidth,
+    // 添加背景框设置控件
+    boxMarginV,
+    boxMarginH,
+    boxPaddingV,
+    boxPaddingH
+];
+
+styleControls.forEach(control => {
+    if (control) {
+        control.addEventListener('input', updateSubtitleStyle);
     }
-);
+});
 
 // 更新字幕样式
 function updateSubtitleStyle() {
@@ -945,15 +962,20 @@ function updateSubtitleStyle() {
         backgroundColor: `${subtitleBgColor.value}${Math.round(subtitleBgOpacity.value * 255).toString(16).padStart(2, '0')}`,
         webkitTextStroke: `${subtitleStrokeWidth.value}px ${subtitleStrokeColor.value}`,
         textStroke: `${subtitleStrokeWidth.value}px ${subtitleStrokeColor.value}`,
-        padding: '0.2em 0.5em',
+        // 使用背景框设置
+        padding: `${boxPaddingV.value}px ${boxPaddingH.value}px`,
+        margin: `${boxMarginV.value}px ${boxMarginH.value}px`,
         borderRadius: '4px',
         maxWidth: '90%',
-        margin: '0 auto',
         whiteSpace: 'pre-wrap',
-        wordWrap: 'break-word'
+        wordWrap: 'break-word',
+        display: 'inline-block'  // 添加这个以确保边距生效
     };
 
-    Object.assign(subtitleOverlay.style, style);
+    const subtitleOverlay = document.getElementById('subtitleOverlay');
+    if (subtitleOverlay) {
+        Object.assign(subtitleOverlay.style, style);
+    }
 }
 
 // WebSocket连接

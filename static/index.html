@@ -279,40 +279,65 @@
             </div>
         </div>
         <!-- 字幕样式控制面板 -->
-        <div id="subtitleStylePanel" class="card mt-3" style="display: none;">
-            <div class="card-header">
-                <h6 class="mb-0">字幕样式设置</h6>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">字体大小</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" id="subtitleFontSize" value="24" min="12" max="72">
-                            <span class="input-group-text">px</span>
+        <div id="subtitleStylePanel" class="mb-3" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">字幕样式设置</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">字体大小</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="subtitleFontSize" value="24" min="12" max="72">
+                                <span class="input-group-text">px</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">字体颜色</label>
+                            <input type="color" class="form-control form-control-color" id="subtitleColor" value="#ffffff">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">背景颜色</label>
+                            <input type="color" class="form-control form-control-color" id="subtitleBgColor" value="#000000">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">背景透明度</label>
+                            <input type="range" class="form-range" id="subtitleBgOpacity" min="0" max="1" step="0.1" value="0.5">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">字体描边颜色</label>
+                            <input type="color" class="form-control form-control-color" id="subtitleStrokeColor" value="#000000">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">字体描边宽度</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="subtitleStrokeWidth" value="2" min="0" max="10" step="0.5">
+                                <span class="input-group-text">px</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">字体颜色</label>
-                        <input type="color" class="form-control form-control-color" id="subtitleColor" value="#ffffff">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">背景颜色</label>
-                        <input type="color" class="form-control form-control-color" id="subtitleBgColor" value="#000000">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">背景透明度</label>
-                        <input type="range" class="form-range" id="subtitleBgOpacity" min="0" max="1" step="0.1" value="0.5">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">字体描边颜色</label>
-                        <input type="color" class="form-control form-control-color" id="subtitleStrokeColor" value="#000000">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">字体描边宽度</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" id="subtitleStrokeWidth" value="2" min="0" max="10" step="0.5">
-                            <span class="input-group-text">px</span>
+                    <div class="mb-3">
+                        <label class="form-label">背景框设置</label>
+                        <div class="row">
+                            <div class="col">
+                                <label for="boxMarginV" class="form-label">垂直边距</label>
+                                <input type="number" class="form-control" id="boxMarginV" value="10">
+                            </div>
+                            <div class="col">
+                                <label for="boxMarginH" class="form-label">水平边距</label>
+                                <input type="number" class="form-control" id="boxMarginH" value="10">
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col">
+                                <label for="boxPaddingV" class="form-label">垂直内边距</label>
+                                <input type="number" class="form-control" id="boxPaddingV" value="5">
+                            </div>
+                            <div class="col">
+                                <label for="boxPaddingH" class="form-label">水平内边距</label>
+                                <input type="number" class="form-control" id="boxPaddingH" value="10">
+                            </div>
                         </div>
                     </div>
                 </div>

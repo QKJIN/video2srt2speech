@@ -27,17 +27,34 @@ def convert_subtitle_style(frontend_data):
         # 去掉 "#" 并提取 RGB
         hex_color = hex_color.lstrip("#")
         r, g, b = int(hex_color[:2], 16), int(hex_color[2:4], 16), int(hex_color[4:], 16)
-        # 转换为 &HAABBGGRR 格式
+        # ASS 使用 AABBGGRR 格式，其中 AA 是 alpha 通道
+        # 在 ASS 中，0 表示完全不透明，255 表示完全透明
         return f"&H{alpha:02X}{b:02X}{g:02X}{r:02X}"
+
+    # 计算 ASS 格式的 alpha 值（反转透明度）
+    # 前端的 opacity: 0.0 (完全透明) -> ASS alpha: 255 (完全透明)
+    # 前端的 opacity: 1.0 (完全不透明) -> ASS alpha: 0 (完全不透明)
+    ass_alpha = int((1 - bg_opacity) * 255)
+
+    # 获取背景框设置
+    box_margin_v = int(frontend_data.get("boxMarginV", 10))
+    box_margin_h = int(frontend_data.get("boxMarginH", 10))
+    box_padding_v = int(frontend_data.get("boxPaddingV", 5))
+    box_padding_h = int(frontend_data.get("boxPaddingH", 10))
 
     # 构建 ASS 样式字典
     return {
-        'fontSize': str(font_size),  # 直接使用前端传来的字体大小
-        'color': hex_to_ass_color(font_color),  # 字体颜色
-        'strokeColor': hex_to_ass_color(stroke_color),  # 描边颜色
-        'strokeWidth': str(stroke_width),  # 描边宽度
-        'bgColor': hex_to_ass_color(bg_color, int((1 - bg_opacity) * 255)),  # 背景颜色带透明度
-        'bgOpacity': str(bg_opacity)  # 保存透明度值
+        'fontSize': str(font_size),
+        'color': hex_to_ass_color(font_color, 0),  # 字体颜色（完全不透明）
+        'strokeColor': hex_to_ass_color(stroke_color, 0),  # 描边颜色（完全不透明）
+        'strokeWidth': str(stroke_width),
+        'bgColor': hex_to_ass_color(bg_color, ass_alpha),  # 背景颜色（使用计算的透明度）
+        'bgOpacity': str(bg_opacity),  # 保存原始透明度值
+        # 添加背景框设置
+        'marginV': str(box_margin_v),
+        'marginH': str(box_margin_h),
+        'marginL': str(box_margin_h),
+        'marginR': str(box_margin_h)
     }
 
 async def burn_subtitles(file_id: str, language: str, style: dict):
@@ -156,7 +173,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
             font_size = style['fontSize']
             font_color = style['color']
             stroke_color = style['strokeColor']
-            bg_color = style['bgColor']
+            bg_color = style['bgColor']  # 这里的 bg_color 已经包含了透明度信息
             stroke_width = style['strokeWidth']
 
             # 添加样式定义
@@ -165,11 +182,11 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
                 f"{font_color},"  # 主要颜色
                 f"{font_color},"  # 次要颜色
                 f"{stroke_color},"  # 边框颜色
-                f"{bg_color},"  # 背景颜色
+                f"{bg_color},"  # 背景颜色（已包含透明度）
                 f"1,0,0,0,"  # 粗体,斜体,下划线,删除线
                 f"100,100,0,0,"  # 缩放X,缩放Y,间距,角度
-                f"1,{stroke_width},0,"  # 边框样式,边框宽度,阴影
-                f"2,10,10,10,1"  # 对齐,左边距,右边距,垂直边距,编码
+                f"3,{stroke_width},0,"  # 边框样式(3=显示背景),边框宽度,阴影
+                f"2,{style['marginL']},{style['marginR']},{style['marginV']},1"  # 对齐,左边距,右边距,垂直边距,编码
             )
             
             ass_content += style_line + "\n\n"
