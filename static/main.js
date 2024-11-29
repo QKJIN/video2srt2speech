@@ -639,15 +639,22 @@ burnSubtitlesBtn.addEventListener('click', async () => {
 
     try {
         showLoading();
-        // 获取字幕样式
+        
+        // 获取字幕样式并进行转换
+        const fontSize = document.getElementById('subtitleFontSize').value;
+        // 将前端的像素值转换为ASS字体大小（大约2.8倍的关系）
+        const convertedFontSize = Math.round(parseFloat(fontSize) * 2.8);
+        
         const style = {
-            fontSize: document.getElementById('subtitleFontSize').value,
-            color: document.getElementById('subtitleColor').value,
-            strokeColor: document.getElementById('subtitleStrokeColor').value,
+            fontSize: convertedFontSize.toString(),
+            color: document.getElementById('subtitleColor').value.toLowerCase(),  // 确保颜色代码小写
+            strokeColor: document.getElementById('subtitleStrokeColor').value.toLowerCase(),
             strokeWidth: document.getElementById('subtitleStrokeWidth').value,
-            bgColor: document.getElementById('subtitleBgColor').value,
+            bgColor: document.getElementById('subtitleBgColor').value.toLowerCase(),
             bgOpacity: document.getElementById('subtitleBgOpacity').value
         };
+
+        console.log('发送的字幕样式:', style);  // 调试日志
 
         const language = document.getElementById('sourceLanguage').value;
         
@@ -660,10 +667,13 @@ burnSubtitlesBtn.addEventListener('click', async () => {
         });
 
         if (!response.ok) {
-            throw new Error(await response.text());
+            const errorText = await response.text();
+            console.error('烧录字幕失败:', errorText);
+            throw new Error(errorText);
         }
 
         const result = await response.json();
+        console.log('烧录字幕结果:', result);
         
         // 显示带字幕的视频
         const subtitledVideo = document.getElementById('subtitledVideo');
@@ -1025,7 +1035,7 @@ function connectWebSocket(fileId) {
         };
 
         ws.onclose = (event) => {
-            console.log('WebSocket连接���关闭', event);
+            console.log('WebSocket连接关闭', event);
             clearInterval(wsKeepAliveInterval);
 
             // 只有在任务未完成且不是主动关闭的情况下才尝试重连

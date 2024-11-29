@@ -12,41 +12,12 @@ from .config import (
 )
 from .utils import convert_to_srt  # 改为从 utils 导入
 
-def convert_subtitle_style(frontend_data):
-    """转换前端字幕样式为 ASS 格式"""
-    # 获取前端数据
-    bg_color = frontend_data["bgColor"]  # 背景颜色 (e.g., "#000000")
-    bg_opacity = float(frontend_data["bgOpacity"])  # 背景透明度 (e.g., "0.5")
-    font_color = frontend_data["color"]  # 字体颜色 (e.g., "#ffffff")
-    font_size = int(float(frontend_data["fontSize"]))  # 字体大小
-    stroke_color = frontend_data["strokeColor"]  # 描边颜色
-    stroke_width = float(frontend_data["strokeWidth"])  # 描边宽度
-
-    # 颜色转换函数
-    def hex_to_ass_color(hex_color, alpha=0):
-        # 去掉 "#" 并提取 RGB
-        hex_color = hex_color.lstrip("#")
-        r, g, b = int(hex_color[:2], 16), int(hex_color[2:4], 16), int(hex_color[4:], 16)
-        # 转换为 &HAABBGGRR 格式
-        return f"&H{alpha:02X}{b:02X}{g:02X}{r:02X}"
-
-    # 构建 ASS 样式字典
-    return {
-        'fontSize': str(font_size),  # 直接使用前端传来的字体大小
-        'color': hex_to_ass_color(font_color),  # 字体颜色
-        'strokeColor': hex_to_ass_color(stroke_color),  # 描边颜色
-        'strokeWidth': str(stroke_width),  # 描边宽度
-        'bgColor': hex_to_ass_color(bg_color, int((1 - bg_opacity) * 255)),  # 背景颜色带透明度
-        'bgOpacity': str(bg_opacity)  # 保存透明度值
-    }
-
 async def burn_subtitles(file_id: str, language: str, style: dict):
     """将字幕烧录到视频中"""
     try:
-        
         # 确保目录存在
-        SUBTITLED_VIDEO_DIR.mkdir(exist_ok=True)
-        TEMP_DIR.mkdir(exist_ok=True)
+        SUBTITLED_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+        TEMP_DIR.mkdir(parents=True, exist_ok=True)
         
         # 准备文件路径
         file_id_without_ext = Path(file_id).stem
@@ -59,30 +30,26 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
         print(f"字幕文件路径: {subtitle_path}")
         print(f"ASS字幕路径: {ass_path}")
         print(f"输出文件路径: {output_path}")
-        
-        # 使用测试样式
-        test_style = {
-            'fontSize': '68',  # 更大的字体
-            'color': '#FF0000',  # 红色
-            'strokeColor': '#000000',  # 黑色描边
-            'strokeWidth': '3',  # 更粗的描边
-            'bgColor': '#FFFF00',  # 黄色背景
-            'bgOpacity': '0.8'  # 较高的不透明度
-        }
+        print(f"收到的样式参数: {style}")
 
         # 从 JSON 转换为 ASS 格式
-        await json_to_ass(subtitle_path, ass_path, convert_subtitle_style(style))  # 使用测试样式
+        await json_to_ass(subtitle_path, ass_path, style)
 
         try:
-            # 确保 ASS 文件存在
+            # 确保 ASS 文件存在并且有内容
             if not ass_path.exists():
                 raise HTTPException(500, f"ASS字幕文件未生成: {ass_path}")
+            
+            # 读取并打印 ASS 文件内容
+            with open(ass_path, 'r', encoding='utf-8') as f:
+                ass_content = f.read()
+                print(f"ASS文件内容:\n{ass_content}")
 
             # 使用 FFmpeg 烧录字幕
             cmd = [
                 'ffmpeg', '-y',
                 '-i', str(video_path),
-                '-vf', f'ass={str(ass_path)}',  # 移除单引号
+                '-vf', f'ass={str(ass_path)}:fontsdir=/System/Library/Fonts',  # 指定字体目录
                 '-c:v', 'libx264',
                 '-preset', 'medium',
                 '-crf', '23',
@@ -116,10 +83,10 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
             }
 
         finally:
-            # 清理临时文件
-            if ass_path.exists():
-                print(f"清理临时ASS文件: {ass_path}")
-                ass_path.unlink()
+            # 暂时不删除 ASS 文件，用于调试
+            print(f"保留 ASS 文件用于调试: {ass_path}")
+            # if ass_path.exists():
+            #     ass_path.unlink()
 
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg 执行失败: {e.stderr}")
@@ -134,8 +101,6 @@ async def json_to_ass(json_path: Path, ass_path: Path, style: dict):
     """将 JSON 格式的字幕转换为 ASS 格式"""
     try:
         import json
-        
-        print("收到的样式参数:", style)
         
         # 读取 JSON 字幕
         with open(json_path, 'r', encoding='utf-8') as f:
@@ -152,14 +117,30 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 """
         try:
-            # 直接使用转换后的样式参数
-            font_size = style['fontSize']
-            font_color = style['color']
-            stroke_color = style['strokeColor']
-            bg_color = style['bgColor']
-            stroke_width = style['strokeWidth']
+            # 使用测试样式的格式处理前端传来的样式
+            font_size = int(float(style.get('fontSize', '68')))  # 默认使用68，跟测试样式一致
+            
+            # 颜色处理（确保格式跟测试样式一致）
+            def process_color(color_str):
+                color = color_str.lstrip('#').lower()  # 转小写以保持一致
+                if len(color) == 6:
+                    color = 'FF' + color  # 不透明
+                return f"&H{color[6:8]}{color[4:6]}{color[2:4]}{color[0:2]}"
 
-            # 添加样式定义
+            # 处理颜色（使用跟测试样式一样的默认值）
+            font_color = process_color(style.get('color', '#ff0000'))  # 默认红色
+            stroke_color = process_color(style.get('strokeColor', '#000000'))  # 默认黑色
+            
+            # 背景颜色和透明度（使用跟测试样式一样的默认值）
+            bg_color = style.get('bgColor', '#ffff00').lstrip('#').lower()  # 默认黄色
+            bg_opacity = float(style.get('bgOpacity', '0.8'))  # 默认0.8
+            bg_alpha = int((1 - bg_opacity) * 255)
+            bg_color = f"&H{bg_alpha:02X}{bg_color}"
+            
+            # 描边宽度（使用跟测试样式一样的默认值）
+            stroke_width = float(style.get('strokeWidth', '3'))  # 默认3
+
+            # 添加样式定义（完全按照测试样式的格式）
             style_line = (
                 f"Style: Default,Arial,{font_size},"  # 名称、字体、大小
                 f"{font_color},"  # 主要颜色
@@ -168,8 +149,8 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
                 f"{bg_color},"  # 背景颜色
                 f"1,0,0,0,"  # 粗体,斜体,下划线,删除线
                 f"100,100,0,0,"  # 缩放X,缩放Y,间距,角度
-                f"1,{stroke_width},0,"  # 边框样式,边框宽度,阴影
-                f"2,10,10,10,1"  # 对齐,左边距,右边距,垂直边距,编码
+                f"1,{stroke_width:.1f},0,"  # 边框样式,边框宽度,阴影
+                f"2,10,10,10,1"  # 对齐,边距,右边距,垂直边距,编码
             )
             
             ass_content += style_line + "\n\n"
@@ -197,6 +178,17 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
             f.write(ass_content)
 
         print(f"生成的ASS文件内容:\n{ass_content}")
+
+        # 验证 ASS 文件是否正确生成
+        if not ass_path.exists():
+            raise HTTPException(500, f"ASS 文件未生成: {ass_path}")
+
+        # 检查 ASS 文件大小
+        file_size = ass_path.stat().st_size
+        if file_size == 0:
+            raise HTTPException(500, "ASS 文件为空")
+
+        print(f"ASS 文件大小: {file_size} 字节")
 
     except Exception as e:
         print(f"转换字幕格式失败: {str(e)}")

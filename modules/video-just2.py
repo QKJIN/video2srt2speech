@@ -13,14 +13,13 @@ from .config import (
 from .utils import convert_to_srt  # 改为从 utils 导入
 
 def convert_subtitle_style(frontend_data):
-    """转换前端字幕样式为 ASS 格式"""
     # 获取前端数据
     bg_color = frontend_data["bgColor"]  # 背景颜色 (e.g., "#000000")
     bg_opacity = float(frontend_data["bgOpacity"])  # 背景透明度 (e.g., "0.5")
     font_color = frontend_data["color"]  # 字体颜色 (e.g., "#ffffff")
-    font_size = int(float(frontend_data["fontSize"]))  # 字体大小
-    stroke_color = frontend_data["strokeColor"]  # 描边颜色
-    stroke_width = float(frontend_data["strokeWidth"])  # 描边宽度
+    font_size = int(frontend_data["fontSize"])  # 字体大小 (e.g., "190")
+    stroke_color = frontend_data["strokeColor"]  # 描边颜色 (e.g., "#000000")
+    stroke_width = float(frontend_data["strokeWidth"])  # 描边宽度 (e.g., "0")
 
     # 颜色转换函数
     def hex_to_ass_color(hex_color, alpha=0):
@@ -30,14 +29,27 @@ def convert_subtitle_style(frontend_data):
         # 转换为 &HAABBGGRR 格式
         return f"&H{alpha:02X}{b:02X}{g:02X}{r:02X}"
 
-    # 构建 ASS 样式字典
+    # 透明度计算
+    def opacity_to_alpha(opacity):
+        return int((1 - opacity) * 255)
+
+    # 转换背景颜色
+    bg_alpha = opacity_to_alpha(bg_opacity)
+    ass_bg_color = hex_to_ass_color(bg_color, bg_alpha)
+
+    # 转换字体颜色（不透明）
+    ass_font_color = hex_to_ass_color(font_color, alpha=0)
+
+    # 转换描边颜色（不透明）
+    ass_stroke_color = hex_to_ass_color(stroke_color, alpha=0)
+
+    # 构建样式字典
     return {
-        'fontSize': str(font_size),  # 直接使用前端传来的字体大小
-        'color': hex_to_ass_color(font_color),  # 字体颜色
-        'strokeColor': hex_to_ass_color(stroke_color),  # 描边颜色
-        'strokeWidth': str(stroke_width),  # 描边宽度
-        'bgColor': hex_to_ass_color(bg_color, int((1 - bg_opacity) * 255)),  # 背景颜色带透明度
-        'bgOpacity': str(bg_opacity)  # 保存透明度值
+        "FontSize": font_size,
+        "FontColor": ass_font_color,
+        "OutlineColor": ass_stroke_color,
+        "BackColor": ass_bg_color,
+        "OutlineWidth": stroke_width
     }
 
 async def burn_subtitles(file_id: str, language: str, style: dict):
@@ -135,7 +147,7 @@ async def json_to_ass(json_path: Path, ass_path: Path, style: dict):
     try:
         import json
         
-        print("收到的样式参数:", style)
+        print("收到的样式参数:", style)  # 添加调试日志
         
         # 读取 JSON 字幕
         with open(json_path, 'r', encoding='utf-8') as f:
@@ -152,12 +164,36 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 """
         try:
-            # 直接使用转换后的样式参数
-            font_size = style['fontSize']
-            font_color = style['color']
-            stroke_color = style['strokeColor']
-            bg_color = style['bgColor']
-            stroke_width = style['strokeWidth']
+            # 字体大小（ASS单位）
+            font_size = int(float(style.get('fontSize', '24')))
+            
+            # 颜色处理（ASS使用AABBGGRR格式，AA是透明度）
+            def process_color(color_str):
+                color = color_str.lstrip('#').upper()  # 确保颜色值大写
+                if len(color) == 6:
+                    color = 'FF' + color  # 不透明
+                # 转换为 ASS 颜色格式
+                return f"&H{color[6:8]}{color[4:6]}{color[2:4]}{color[0:2]}"
+
+            # 处理颜色
+            font_color = process_color(style.get('color', '#FFFFFF'))
+            stroke_color = process_color(style.get('strokeColor', '#000000'))
+            
+            # 背景颜色和透明度
+            bg_color = style.get('bgColor', '#000000').lstrip('#').upper()
+            bg_opacity = float(style.get('bgOpacity', 0.5))
+            bg_alpha = int((1 - bg_opacity) * 255)
+            bg_color = f"&H{bg_alpha:02X}{bg_color}"
+            
+            # 描边宽度
+            stroke_width = float(style.get('strokeWidth', 2))
+
+            print(f"处理后的样式参数:")  # 添加调试日志
+            print(f"字体大小: {font_size}")
+            print(f"字体颜色: {font_color}")
+            print(f"描边颜色: {stroke_color}")
+            print(f"背景颜色: {bg_color}")
+            print(f"描边宽度: {stroke_width}")
 
             # 添加样式定义
             style_line = (
@@ -168,12 +204,12 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
                 f"{bg_color},"  # 背景颜色
                 f"1,0,0,0,"  # 粗体,斜体,下划线,删除线
                 f"100,100,0,0,"  # 缩放X,缩放Y,间距,角度
-                f"1,{stroke_width},0,"  # 边框样式,边框宽度,阴影
+                f"1,{stroke_width:.1f},0,"  # 边框样式,边框宽度,阴影
                 f"2,10,10,10,1"  # 对齐,左边距,右边距,垂直边距,编码
             )
             
             ass_content += style_line + "\n\n"
-            print(f"ASS样式行: {style_line}")
+            print(f"ASS样式行: {style_line}")  # 添加调试日志
 
         except ValueError as e:
             print(f"样式参数处理错误: {e}")
