@@ -3,6 +3,16 @@ let currentFileId = null;
 let subtitles = null;  // 原始字幕
 let translations = null;  // 翻译后的字幕
 
+// 在文件顶部声明 WebSocket 相关的全局变量
+let ws;
+let wsKeepAliveInterval;
+let wsReconnectAttempts = 0;
+let isTaskCompleted = false;  // 任务完成标志
+let isClosing = false;  // 主动关闭标志
+
+const MAX_RECONNECT_ATTEMPTS = 3;  // 最大重连次数
+const RECONNECT_DELAY = 1000;  // 基础重连延迟（毫秒）
+
 // 显示加载动画
 function showLoading() {
     document.querySelector('.loading-overlay').style.display = 'flex';
@@ -979,15 +989,6 @@ function updateSubtitleStyle() {
 }
 
 // WebSocket连接
-let ws;
-let wsKeepAliveInterval;
-let wsReconnectAttempts = 0;
-let isTaskCompleted = false;  // 任务完成标志
-let isClosing = false;  // 主动关闭标志
-
-const MAX_RECONNECT_ATTEMPTS = 3;  // 最大重连次数
-const RECONNECT_DELAY = 1000;  // 基础重连延迟（毫秒）
-
 function connectWebSocket(fileId) {
     // 重置任务状态
     isTaskCompleted = false;

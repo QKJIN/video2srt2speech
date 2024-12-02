@@ -12,6 +12,16 @@ from .config import (
 )
 from .utils import convert_to_srt  # 改为从 utils 导入
 
+
+# 颜色转换函数
+def hex_to_ass_color(hex_color, alpha=0):
+        # 去掉 "#" 并提取 RGB
+        hex_color = hex_color.lstrip("#")
+        r, g, b = int(hex_color[:2], 16), int(hex_color[2:4], 16), int(hex_color[4:], 16)
+        # ASS 使用 AABBGGRR 格式，其中 AA 是 alpha 通道
+        # 在 ASS 中，0 表示完全不透明，255 表示完全透明
+        return f"&H{alpha:02X}{b:02X}{g:02X}{r:02X}"
+
 def convert_subtitle_style(frontend_data):
     """转换前端字幕样式为 ASS 格式"""
     # 获取前端数据
@@ -22,14 +32,7 @@ def convert_subtitle_style(frontend_data):
     stroke_color = frontend_data["strokeColor"]  # 描边颜色
     stroke_width = float(frontend_data["strokeWidth"])  # 描边宽度
 
-    # 颜色转换函数
-    def hex_to_ass_color(hex_color, alpha=0):
-        # 去掉 "#" 并提取 RGB
-        hex_color = hex_color.lstrip("#")
-        r, g, b = int(hex_color[:2], 16), int(hex_color[2:4], 16), int(hex_color[4:], 16)
-        # ASS 使用 AABBGGRR 格式，其中 AA 是 alpha 通道
-        # 在 ASS 中，0 表示完全不透明，255 表示完全透明
-        return f"&H{alpha:02X}{b:02X}{g:02X}{r:02X}"
+
 
     # 计算 ASS 格式的 alpha 值（反转透明度）
     # 前端的 opacity: 0.0 (完全透明) -> ASS alpha: 255 (完全透明)
@@ -173,8 +176,12 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
             font_size = style['fontSize']
             font_color = style['color']
             stroke_color = style['strokeColor']
+            bg_opacity = float(style['bgOpacity'])
+            ass_alpha = int((1 - bg_opacity) * 255)  # 转换透明度
+            # bg_color = hex_to_ass_color(style['bgColor'], ass_alpha)  # 确保正确透明度
             bg_color = style['bgColor']  # 这里的 bg_color 已经包含了透明度信息
-            stroke_width = style['strokeWidth']
+            # stroke_width = style['strokeWidth']
+            stroke_width = max(1.0, float(style['strokeWidth']))  # 边框宽度，避免 0 导致问题
 
             # 添加样式定义
             style_line = (
