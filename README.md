@@ -123,3 +123,7 @@ new-srt2speech/
 ## License
 
 MIT License
+
+## 安装
+
+1. 安装依赖：

@@ -541,7 +541,7 @@ translateBtn.addEventListener('click', async () => {
         // 显示原文和译文
         displaySubtitles(currentFileId, subtitles, translations);
         
-        // 启用生成语音按钮
+        // 启用生成���音按钮
         if (generateSpeechBtn) {
             generateSpeechBtn.disabled = false;
         }
@@ -566,8 +566,8 @@ generateSpeechBtn.addEventListener('click', async () => {
         return;
     }
 
-    if (!voiceSelect.value) {
-        showError('请选择语音');
+    if (!voiceSelect.value && !useLocalTTS.checked) {
+        showError('请选择语音或使用本地TTS');
         return;
     }
 
@@ -578,8 +578,25 @@ generateSpeechBtn.addEventListener('click', async () => {
         // 连接WebSocket以接收实时进度
         connectWebSocket(currentFileId);
         
-        const response = await fetch(`/generate-speech/${currentFileId}?target_language=${targetLanguage.value}&voice_name=${voiceSelect.value}`, {
-            method: 'POST'
+        // 准备请求参数
+        const params = {
+            target_language: targetLanguage.value,
+            use_local_tts: useLocalTTS.checked
+        };
+        
+        // 如果不是使用本地TTS，则添加voice_name
+        if (!useLocalTTS.checked) {
+            params.voice_name = voiceSelect.value;
+        }
+
+        console.log('生成语音参数:', params);
+
+        const response = await fetch(`/generate-speech/${currentFileId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(params)
         });
 
         if (!response.ok) {
@@ -609,7 +626,6 @@ generateSpeechBtn.addEventListener('click', async () => {
         hideLoading();
     }
 });
-
 // 合并音频
 mergeAudioBtn.addEventListener('click', async () => {
     if (!currentFileId) {
@@ -1153,3 +1169,4 @@ function showMessage(message, type = 'info') {
         }, 300);
     }, 3000);
 }
+

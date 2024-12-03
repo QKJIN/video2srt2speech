@@ -115,10 +115,17 @@ async def get_available_voices(language: str):
 @app.post("/generate-speech/{file_id}")
 async def generate_speech_endpoint(
     file_id: str,
-    target_language: str,
-    voice_name: str = "zh-CN-XiaoxiaoNeural"
+    params: dict = Body(...),
 ):
-    return await speech.generate_speech_for_file(file_id, target_language, voice_name)
+    try:
+        return await speech.generate_speech_for_file(
+            file_id,
+            target_language=params.get('target_language'),
+            voice_name=params.get('voice_name'),
+            use_local_tts=params.get('use_local_tts', False)
+        )
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 @app.post("/generate-speech-single/{file_id}/{subtitle_index}")
 async def generate_speech_single_endpoint(
