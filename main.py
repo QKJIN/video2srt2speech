@@ -6,6 +6,7 @@ from pathlib import Path
 import math
 import asyncio
 import zipfile
+import os
 
 from modules import (
     config, 
@@ -17,7 +18,7 @@ from modules import (
     video,
     utils
 )
-from modules.config import DIRS, UPLOAD_DIR, SUBTITLE_DIR, TEMP_DIR
+from modules.config import DIRS, UPLOAD_DIR, SUBTITLE_DIR, TEMP_DIR, AUDIO_DIR
 
 # 创建必要的目录
 for dir_path in DIRS:
@@ -66,32 +67,40 @@ async def websocket_endpoint(ws: WebSocket, file_id: str):
 async def extract_audio_endpoint(file_id: str):
     return await audio.extract_audio(file_id)
 
-@app.post("/generate-subtitles/{file_id}")
+@app.post("/api/generate_subtitles")
 async def generate_subtitles_endpoint(
-    file_id: str, 
-    language: str = "zh-CN",
-    model: str = "whisper-tiny"
+    file_id: str = Body(...),
+    language: str = Body("zh"),
+    model_type: str = Body("whisper_tiny")
 ):
-    print(f"生成字幕请求 - 文件: {file_id}")
-    print(f"请求参数 - 语言: {language}, 模型: {model}")
-    
-    use_whisper = model.startswith("whisper-")
-    whisper_size = model.split("-")[1] if use_whisper else None
-    
-    print(f"处理后的参数 - 使用Whisper: {use_whisper}, 模型大小: {whisper_size}")
-    
     try:
+        # 获取音频文件路径
+        audio_file_id = os.path.splitext(file_id)[0] + '.mp3'
+        audio_path = AUDIO_DIR / audio_file_id
+        if not audio_path.exists():
+            raise HTTPException(404, f"音频文件不存在: {audio_path}")
+
+        print(f"处理字幕生成请求 - 文件: {file_id}, 语言: {language}, 模型: {model_type}")
+
+        # 生成字幕
         result = await subtitles.generate_subtitles(
-            file_id, 
-            language, 
-            use_whisper=use_whisper,
-            whisper_model_size=whisper_size
+            file_id=file_id,
+            audio_path=audio_path,
+            model_type=model_type,
+            language=language
         )
-        print("字幕生成成功")
-        return result
+
+        return {
+            "status": "success",
+            "message": "字幕生成成功",
+            "subtitles": result
+        }
+
     except Exception as e:
         print(f"字幕生成失败: {str(e)}")
-        raise
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(500, f"生成字幕失败: {str(e)}")
 
 @app.post("/translate-subtitles/{file_id}")
 async def translate_subtitles_endpoint(
@@ -132,9 +141,10 @@ async def generate_speech_single_endpoint(
     file_id: str, 
     subtitle_index: int,
     text: str,
-    voice_name: str = "zh-CN-XiaoxiaoNeural"
+    voice_name: str = "zh-CN-XiaoxiaoNeural",
+    target_language: str = "en-US"
 ):
-    return await speech.generate_speech(file_id, subtitle_index, text, voice_name)
+    return await speech.generate_speech(file_id, subtitle_index, text, voice_name, target_language)
 
 @app.post("/merge-audio/{file_id}")
 async def merge_audio_endpoint(file_id: str, target_language: str):

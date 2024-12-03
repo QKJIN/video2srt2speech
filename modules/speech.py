@@ -16,14 +16,14 @@ from .websocket import send_message
 import json
 from .tts import tts as local_tts
 
-async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_name: str = "zh-CN-XiaoxiaoNeural", use_local_tts: bool = False):
+async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_name: str = "zh-CN-XiaoxiaoNeural", use_local_tts: bool = False, target_language: str = "en"):
     try:
         if use_local_tts:
             # 使用本地 TTS
             audio_data = await local_tts.generate_speech(text)
             
             # 准备音频文件路径
-            audio_dir = AUDIO_DIR / file_id / "local"
+            audio_dir = AUDIO_DIR / file_id / target_language
             audio_dir.mkdir(parents=True, exist_ok=True)
             
             audio_file = audio_dir / f"{subtitle_index:04d}.mp3"

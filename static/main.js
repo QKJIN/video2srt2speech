@@ -1,3 +1,13 @@
+const MODEL_MAP = {
+    'whisper-tiny': 'whisper_tiny',
+    'whisper-base': 'whisper_base',
+    'whisper-small': 'whisper_small',
+    'whisper-medium': 'whisper_medium',
+    'whisper-large': 'whisper_large',
+    'azure': 'azure'
+};
+
+
 // 全局变量
 let currentFileId = null;
 let subtitles = null;  // 原始字幕
@@ -202,6 +212,18 @@ async function extractAudio(fileId) {
     }
 }
 
+// 添加语言代码映射
+const LANGUAGE_MAP = {
+    'zh-CN': 'zh',
+    'en-US': 'en',
+    'ja-JP': 'ja',
+    'ko-KR': 'ko',
+    'fr-FR': 'fr',
+    'de-DE': 'de',
+    'es-ES': 'es',
+    'ru-RU': 'ru'
+};
+
 // 生成字幕
 generateSubtitlesBtn.addEventListener('click', async () => {
     if (!currentFileId) {
@@ -213,9 +235,25 @@ generateSubtitlesBtn.addEventListener('click', async () => {
         showLoading();
         console.log('开始生成字幕...');
 
-        // 先发送 HTTP 请求
-        const response = await fetch(`/generate-subtitles/${currentFileId}?language=${sourceLanguage.value}`, {
-            method: 'POST'
+        // 获取选择的模型
+        const subtitleModel = document.getElementById('subtitleModel').value;
+        // 转换模型名称
+        const modelType = MODEL_MAP[subtitleModel] || 'whisper_tiny';
+
+        // 转换语言代码
+        const lang = LANGUAGE_MAP[sourceLanguage.value] || sourceLanguage.value;
+
+        // 使用新的 API 路径和格式
+        const response = await fetch('/api/generate_subtitles', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                file_id: currentFileId,
+                language: lang,  // 使用转换后的语言代码
+                model_type: modelType
+            })
         });
 
         if (!response.ok) {
@@ -230,13 +268,13 @@ generateSubtitlesBtn.addEventListener('click', async () => {
         console.log('生成字幕响应:', data);
 
         // 检查响应数据格式
-        if (!data || !Array.isArray(data)) {
+        if (!data || !data.subtitles || !Array.isArray(data.subtitles)) {
             console.error('无效的响应数据:', data);
             throw new Error('服务器返回的数据格式不正确');
         }
 
         // 更新字幕数据
-        subtitles = data;
+        subtitles = data.subtitles;
         translations = null;  // 清除之前的翻译
         console.log('更新字幕数据:', subtitles);
         
@@ -541,7 +579,7 @@ translateBtn.addEventListener('click', async () => {
         // 显示原文和译文
         displaySubtitles(currentFileId, subtitles, translations);
         
-        // 启用生成���音按钮
+        // 启用生成语音按钮
         if (generateSpeechBtn) {
             generateSpeechBtn.disabled = false;
         }

@@ -12,11 +12,14 @@ from .config import (
     AUDIO_DIR, 
     UPLOAD_DIR,
     AZURE_SPEECH_KEY,
-    AZURE_SPEECH_REGION
+    AZURE_SPEECH_REGION,
+    MODELS_DIR
 )
 from .utils import convert_to_srt
 import re
 import azure.cognitiveservices.speech as speechsdk
+import whisper
+import torch
 
 async def update_subtitle(file_id: str, data: dict):
     """更新字幕内容"""
@@ -83,226 +86,115 @@ async def update_single_subtitle(file_id: str, index: int, new_text: str):
         "text": new_text
     })
 
-async def generate_subtitles(
-    file_id: str, 
-    language: str = "zh-CN", 
-    use_whisper: bool = False,
-    whisper_model_size: str = None,
-    auto_fallback: bool = True
-):
-    """生成字幕的主要逻辑"""
-    try:
-        print(f"开始生成字幕，文件ID: {file_id}")
-        print(f"参数 - 语言: {language}, 使用Whisper: {use_whisper}, 模型大小: {whisper_model_size}")
-        
-        # 获取音频文件路径
-        audio_file_id = os.path.splitext(file_id)[0] + '.mp3'
-        audio_path = AUDIO_DIR / audio_file_id
-        video_path = UPLOAD_DIR / file_id
-        
-        if not audio_path.exists():
-            print(f"音频文件不存在: {audio_path}")
-            raise HTTPException(404, "音频文件未找到，请先提取音频")
+async def generate_subtitles(file_id: str, audio_path: Path, model_type: str = "whisper_tiny", language: str = "zh"):
+    """生成字幕的包装函数
+    Args:
+        file_id: 文件ID
+        audio_path: 音频文件路径
+        model_type: 模型类型 (whisper_tiny, whisper_base, whisper_small, whisper_medium, whisper_large, azure)
+        language: 语言代码
+    """
+    return await subtitle_generator.generate_subtitles(file_id, audio_path, model_type, language)
 
-        all_subtitles = []
+class SubtitleGenerator:
+    def __init__(self):
+        self.model = None
+        self.model_name = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        # 添加语言代码映射
+        self.language_codes = {
+            "zh": "zh",
+            "zh-CN": "zh",
+            "zh-cn": "zh",
+            "en": "en",
+            "en-US": "en",
+            "ja": "ja",
+            "ja-JP": "ja",
+            "ko": "ko",
+            "ko-KR": "ko",
+            "fr": "fr",
+            "fr-FR": "fr",
+            "de": "de",
+            "de-DE": "de",
+            "es": "es",
+            "es-ES": "es",
+            "ru": "ru",
+            "ru-RU": "ru"
+        }
+        
+    async def generate_subtitles(self, file_id: str, audio_path: Path, model_type: str = "whisper_tiny", language: str = "zh"):
+        """生成字幕"""
         try:
-            if use_whisper:
-                # Whisper 处理逻辑
-                from . import whisper_utils
-                
-                if whisper_model_size:
-                    whisper_utils.set_model_size(whisper_model_size)
-                
-                await websocket.send_message(file_id, {
-                    "type": "progress",
-                    "message": "正在使用Whisper生成字幕",
-                    "progress": 0
-                })
-                
-                all_subtitles = await whisper_utils.transcribe_audio(audio_path, language)
-                
-                await websocket.send_message(file_id, {
-                    "type": "progress",
-                    "message": "Whisper字幕生成完成",
-                    "progress": 100
-                })
-            else:
-                # Azure 处理逻辑
-                try:
-                    print(f"开始处理音频文件: {audio_path}")
-                    print(f"源语言: {language}")
-
-                    # 获取视频时长
-                    video_duration = video.get_video_duration(video_path)
-
-                    # 将音频分段处理
-                    segment_duration = 300  # 5分钟一段
-                    total_segments = math.ceil(video_duration / segment_duration)
-                    print(f"音频总时长: {video_duration}秒，分为 {total_segments} 段处理")
-
-                    # 存储所有字幕和错误
-                    recognition_errors = []
-                    
-                    async def process_segment(segment_index: int):
-                        start_time = segment_index * segment_duration
-                        end_time = min((segment_index + 1) * segment_duration, video_duration)
-                        
-                        # 创建临时音频段文件
-                        segment_path = TEMP_DIR / f"{audio_file_id}_segment_{segment_index}.wav"
-                        
-                        try:
-                            # 提取音频段
-                            await audio.extract_audio_segment(audio_path, segment_path, start_time, end_time)
-                            
-                            # 存储当前段的识别结果
-                            segment_results = []
-                            recognition_complete = asyncio.Event()
-
-                            def handle_result(evt):
-                                try:
-                                    if evt.result.text:
-                                        duration = evt.result.duration / 10000000
-                                        start_time_in_video = start_time + (evt.result.offset / 10000000)
-                                        
-                                        # 根据标点符号分割句子
-                                        sentences = re.split('[。！？.!?]', evt.result.text)
-                                        sentences = [s.strip() for s in sentences if s.strip()]
-                                        
-                                        if len(sentences) > 1:
-                                            # 处理多个句子
-                                            total_chars = sum(len(s) for s in sentences)
-                                            current_start = start_time_in_video
-                                            
-                                            for sentence in sentences:
-                                                if not sentence:
-                                                    continue
-                                                
-                                                sentence_ratio = len(sentence) / total_chars
-                                                sentence_duration = duration * sentence_ratio
-                                                optimal_duration = max(2.0, min(sentence_duration, 10.0))
-                                                
-                                                segment_results.append({
-                                                    "start": current_start,
-                                                    "duration": optimal_duration,
-                                                    "text": sentence
-                                                })
-                                                current_start += optimal_duration
-                                        else:
-                                            optimal_duration = max(2.0, min(duration, 10.0))
-                                            segment_results.append({
-                                                "start": start_time_in_video,
-                                                "duration": optimal_duration,
-                                                "text": evt.result.text
-                                            })
-
-                                except Exception as e:
-                                    print(f"处理识别结果时出错: {str(e)}")
-                                    recognition_errors.append(str(e))
-
-                            def handle_completed(evt):
-                                recognition_complete.set()
-
-                            def handle_canceled(evt):
-                                print(f"语音识别被取消: {evt.result.cancellation_details.reason}")
-                                print(f"错误详情: {evt.result.cancellation_details.error_details}")
-                                recognition_complete.set()
-
-                            # 配置语音识别
-                            speech_config = speechsdk.SpeechConfig(
-                                subscription=AZURE_SPEECH_KEY, 
-                                region=AZURE_SPEECH_REGION
-                            )
-                            
-                            if language.lower() == "en":
-                                speech_config.speech_recognition_language = "en-US"
-                            else:
-                                speech_config.speech_recognition_language = language
-
-                            audio_config = speechsdk.AudioConfig(filename=str(segment_path))
-                            speech_recognizer = speechsdk.SpeechRecognizer(
-                                speech_config=speech_config, 
-                                audio_config=audio_config
-                            )
-
-                            speech_recognizer.recognized.connect(handle_result)
-                            speech_recognizer.session_stopped.connect(handle_completed)
-                            speech_recognizer.canceled.connect(handle_canceled)
-
-                            speech_recognizer.start_continuous_recognition()
-                            
-                            try:
-                                await asyncio.wait_for(recognition_complete.wait(), timeout=60)
-                            finally:
-                                speech_recognizer.stop_continuous_recognition()
-                            
-                            return segment_results
-
-                        except Exception as e:
-                            error_msg = f"处理音频段 {segment_index} 时出错: {str(e)}"
-                            print(error_msg)
-                            recognition_errors.append(error_msg)
-                            return []
-                        finally:
-                            if segment_path.exists():
-                                segment_path.unlink()
-
-                    # 并行处理所有音频段
-                    tasks = [process_segment(i) for i in range(total_segments)]
-                    segment_results = await asyncio.gather(*tasks)
-
-                    # 合并所有段落的结果
-                    for results in segment_results:
-                        all_subtitles.extend(results)
-
-                    # 按开始时间排序
-                    all_subtitles.sort(key=lambda x: x["start"])
-
-                    if not all_subtitles:
-                        raise Exception("未能识别出任何文本")
-
-                except Exception as azure_error:
-                    if "Quota exceeded" in str(azure_error) and auto_fallback:
-                        print("Azure 配额超限，自动切换到 Whisper")
-                        await websocket.send_message(file_id, {
-                            "type": "progress",
-                            "message": "Azure 配额超限，切换到 Whisper",
-                            "progress": 0
-                        })
-                        return await generate_subtitles(
-                            file_id, 
-                            language, 
-                            use_whisper=True,
-                            whisper_model_size="base",
-                            auto_fallback=False
-                        )
-                    else:
-                        raise
-
-            # 保存字幕文件
-            file_id_without_ext = os.path.splitext(file_id)[0]
-            subtitle_path = SUBTITLE_DIR / f"{file_id_without_ext}.json"
-            with open(subtitle_path, "w", encoding="utf-8") as f:
-                json.dump(all_subtitles, f, ensure_ascii=False, indent=2)
+            print(f"使用模型: {model_type}, 语言: {language}")
             
-            return all_subtitles
-
+            # 转换语言代码
+            whisper_language = self.language_codes.get(language, "zh")
+            print(f"转换后的语言代码: {whisper_language}")
+            
+            if model_type == "azure":
+                # 使用 Azure 语音识别
+                results = await speech.recognize_speech(file_id, audio_path, language)
+                
+                # 转换为统一格式
+                subtitles = []
+                for result in results:
+                    subtitles.append({
+                        "start": result["start"],
+                        "duration": result["duration"],
+                        "text": result["text"]
+                    })
+                
+            else:
+                # 使用 Whisper 模型
+                whisper_model = model_type.replace("whisper_", "")
+                
+                # 如果模型变化了，重新加载
+                if self.model_name != whisper_model:
+                    print(f"加载 Whisper 模型: {whisper_model}")
+                    self.model = whisper.load_model(whisper_model, device=self.device)
+                    self.model_name = whisper_model
+                
+                # 转录音频
+                print(f"使用 {whisper_model} 模型转录音频...")
+                result = self.model.transcribe(
+                    str(audio_path),
+                    language=whisper_language,  # 使用转换后的语言代码
+                    task="transcribe",
+                    verbose=False
+                )
+                
+                # 提取字幕
+                subtitles = []
+                for segment in result["segments"]:
+                    subtitles.append({
+                        "start": segment["start"],
+                        "duration": segment["end"] - segment["start"],
+                        "text": segment["text"].strip()
+                    })
+                
+                print(f"转录完成，生成了 {len(subtitles)} 条字幕")
+            
+            # 保存字幕文件
+            subtitle_file = SUBTITLE_DIR / f"{file_id}.json"
+            with open(subtitle_file, 'w', encoding='utf-8') as f:
+                json.dump(subtitles, f, ensure_ascii=False, indent=2)
+            
+            return subtitles
+            
         except Exception as e:
-            error_msg = f"字幕生成失败: {str(e)}"
-            print(error_msg)
-            await websocket.send_message(file_id, {
-                "type": "error",
-                "message": error_msg
-            })
-            raise HTTPException(500, error_msg)
+            print(f"生成字幕失败: {str(e)}")
+            raise HTTPException(500, f"生成字幕失败: {str(e)}")
+    
+    def __del__(self):
+        # 清理模型
+        if self.model is not None:
+            del self.model
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
-    except Exception as e:
-        error_msg = f"���成字幕时出错: {str(e)}"
-        print(error_msg)
-        await websocket.send_message(file_id, {
-            "type": "error",
-            "message": error_msg
-        })
-        raise HTTPException(500, error_msg)
+# 创建全局实例
+subtitle_generator = SubtitleGenerator()
 
 async def merge_bilingual_subtitles(file_id: str, source_language: str, target_language: str):
     """合并双语字幕"""
@@ -430,3 +322,11 @@ async def save_subtitles_as_srt(file_id: str, language: str = None):
         if isinstance(e, HTTPException):
             raise
         raise HTTPException(500, f"导出SRT字幕失败: {str(e)}")
+
+# 在文件末尾添加导出
+__all__ = [
+    'generate_subtitles',
+    'update_subtitle',
+    'update_single_subtitle',
+    'merge_bilingual_subtitles'
+]
