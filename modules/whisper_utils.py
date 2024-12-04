@@ -3,23 +3,23 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 import requests
-from .config import WHISPER_MODEL_SIZE, WHISPER_MODEL_PATH, MODELS_DIR, WHISPER_MODELS
+from .config import WHISPER_MODEL_SIZE, WHISPER_MODEL_PATH, MODELS_DIR, WHISPER_MODELS, LANGUAGE_CODE_MAP
 
 # 添加语言代码映射
-LANGUAGE_CODE_MAP = {
-    "zh-CN": "zh",
-    "zh-TW": "zh",
-    "en-US": "en",
-    "en": "en",
-    "ja-JP": "ja",
-    "ja": "ja",
-    "ko-KR": "ko",
-    "ko": "ko",
-    "fr-FR": "fr",
-    "fr": "fr",
-    "de-DE": "de",
-    "de": "de"
-}
+# LANGUAGE_CODE_MAP = {
+#     "zh-CN": "zh",
+#     "zh-TW": "zh",
+#     "en-US": "en",
+#     "en": "en",
+#     "ja-JP": "ja",
+#     "ja": "ja",
+#     "ko-KR": "ko",
+#     "ko": "ko",
+#     "fr-FR": "fr",
+#     "fr": "fr",
+#     "de-DE": "de",
+#     "de": "de"
+# }
 
 def download_model():
     """下载 Whisper 模型"""

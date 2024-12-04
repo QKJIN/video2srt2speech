@@ -176,7 +176,8 @@ class SubtitleGenerator:
                 print(f"转录完成，生成了 {len(subtitles)} 条字幕")
             
             # 保存字幕文件
-            subtitle_file = SUBTITLE_DIR / f"{file_id}.json"
+            file_id_without_ext = file_id.rsplit('.', 1)[0]
+            subtitle_file = SUBTITLE_DIR / f"{file_id_without_ext}.json"
             with open(subtitle_file, 'w', encoding='utf-8') as f:
                 json.dump(subtitles, f, ensure_ascii=False, indent=2)
             

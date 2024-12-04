@@ -13,6 +13,7 @@ async def translate_subtitles(file_id: str, source_language: str, target_languag
             raise HTTPException(500, "翻译服务配置缺失")
         
         # 读取源字幕
+        print(f"读取源字幕: {file_id}")
         file_id_without_ext = file_id.rsplit('.', 1)[0]
         source_subtitle_file = SUBTITLE_DIR / f"{file_id_without_ext}.json"
         

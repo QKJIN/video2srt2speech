@@ -24,11 +24,26 @@ AZURE_TRANSLATOR_KEY = os.getenv("AZURE_TRANSLATOR_KEY")
 AZURE_TRANSLATOR_REGION = os.getenv("AZURE_TRANSLATOR_REGION")
 
 # 语言配置
+# LANGUAGE_CODE_MAP = {
+#     "en": "en-US",
+#     "zh": "zh-CN",
+#     "zh-TW": "zh-CN",  # 暂时使用简体中文声音
+#     "ja": "ja-JP"
+# }
+# 添加语言代码映射
 LANGUAGE_CODE_MAP = {
-    "en": "en-US",
-    "zh": "zh-CN",
-    "zh-TW": "zh-CN",  # 暂时使用简体中文声音
-    "ja": "ja-JP"
+    "zh-CN": "zh",
+    "zh-TW": "zh",
+    "en-US": "en",
+    "en": "en",
+    "ja-JP": "ja",
+    "ja": "ja",
+    "ko-KR": "ko",
+    "ko": "ko",
+    "fr-FR": "fr",
+    "fr": "fr",
+    "de-DE": "de",
+    "de": "de"
 }
 
 # 支持的语音列表
@@ -43,6 +58,17 @@ SUPPORTED_VOICES = {
         {"name": "zh-CN-XiaohanNeural", "gender": "Female", "description": "晓涵 - 温柔女声"},
         {"name": "zh-CN-XiaomoNeural", "gender": "Female", "description": "晓墨 - 活泼女声"},
         {"name": "zh-CN-XiaoxuanNeural", "gender": "Female", "description": "晓萱 - 成熟女声"}
+    ],
+    "zh-TW": [
+        {"name": "zh-TW-HsiaoChenNeural", "gender": "Female", "description": "晓晨 - 活力女声"},
+        {"name": "zh-TW-HsiaoYuNeural", "gender": "Female", "description": "晓语 - 温柔女声"},
+        {"name": "zh-TW-HsiaoMeiNeural", "gender": "Female", "description": "晓美 - 甜美女声"},
+        {"name": "zh-TW-HsiaoXuanNeural", "gender": "Female", "description": "晓萱 - 成熟女声"},
+        {"name": "zh-TW-HsiaoQianNeural", "gender": "Female", "description": "晓倩 - 甜美女声"},
+        {"name": "zh-TW-YunJheNeural", "gender": "Male", "description": "云哲 - 专业男声"},
+        {"name": "zh-TW-WeiJyeNeural", "gender": "Male", "description": "伟杰 - 成熟男声"},
+        {"name": "zh-TW-LiShiNeural", "gender": "Male", "description": "力士 - 青年男声"},
+        {"name": "zh-TW-YuShiNeural", "gender": "Male", "description": "宇士 - 活力男声"}
     ],
     "en-US": [
         {"name": "en-US-JennyNeural", "gender": "Female", "description": "Jenny - Casual and friendly"},
@@ -59,6 +85,25 @@ SUPPORTED_VOICES = {
         {"name": "ja-JP-KeitaNeural", "gender": "Male", "description": "Keita - Professional"},
         {"name": "ja-JP-AoiNeural", "gender": "Female", "description": "Aoi - Cheerful and clear"},
         {"name": "ja-JP-DaichiNeural", "gender": "Male", "description": "Daichi - Friendly and natural"}
+    ],
+    "ko-KR": [
+        {"name": "ko-KR-SunHiNeural", "gender": "Female", "description": "Sun-Hi - 温暖自然"},
+        {"name": "ko-KR-InJoonNeural", "gender": "Male", "description": "In-Joon - 专业男声"},
+        {"name": "ko-KR-YuJinNeural", "gender": "Female", "description": "Yu-Jin - 活力女声"},
+        {"name": "ko-KR-JiMinNeural", "gender": "Female", "description": "Ji-Min - 友好女声"},
+        {"name": "ko-KR-SeoHyeonNeural", "gender": "Female", "description": "Seo-Hyeon - 成熟女声"},
+        {"name": "ko-KR-GookMinNeural", "gender": "Male", "description": "Gook-Min - 年轻男声"},
+        {"name": "ko-KR-BongJinNeural", "gender": "Male", "description": "Bong-Jin - 稳重男声"}
+    ],
+    "fr-FR": [
+        {"name": "fr-FR-DeniseNeural", "gender": "Female", "description": "Denise - Professional"},
+        {"name": "fr-FR-HenriNeural", "gender": "Male", "description": "Henri - Professional"}
+    ],
+    "de-DE": [
+        {"name": "de-DE-KatjaNeural", "gender": "Female", "description": "Katja - Professional"},
+        {"name": "de-DE-HannaNeural", "gender": "Female", "description": "Hanna - Professional"},
+        {"name": "de-DE-BjarneNeural", "gender": "Male", "description": "Bjarne - Professional"},
+        {"name": "de-DE-BerndNeural", "gender": "Male", "description": "Bernd - Professional"}
     ]
 }
 

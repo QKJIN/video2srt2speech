@@ -15,8 +15,10 @@ from .config import (
 from .websocket import send_message
 import json
 from .tts import tts as local_tts
+from pydub import AudioSegment
+import io
 
-async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_name: str = "zh-CN-XiaoxiaoNeural", use_local_tts: bool = False, target_language: str = "en"):
+async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_name: str = "zh-CN-XiaoxiaoNeural", use_local_tts: bool = False, target_language: str = "en-US"):
     try:
         if use_local_tts:
             # 使用本地 TTS
@@ -62,8 +64,8 @@ async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_na
             audio_file = audio_dir / f"{subtitle_index:04d}.mp3"
             
             # 配置音频输出
-            audio_config = speechsdk.AudioOutputConfig(filename=str(temp_wav_file))
-            
+            audio_config = speechsdk.audio.AudioOutputConfig(filename=str(temp_wav_file))
+
             # 创建语音合成器
             speech_synthesizer = speechsdk.SpeechSynthesizer(
                 speech_config=speech_config, 
@@ -75,16 +77,30 @@ async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_na
             
             if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
                 # 将WAV转换为MP3
-                subprocess.run([
-                    'ffmpeg', '-y',
-                    '-i', str(temp_wav_file),
-                    '-codec:a', 'libmp3lame',
-                    '-qscale:a', '4',
-                    str(audio_file)
-                ], check=True)
+                # subprocess.run([
+                #     'ffmpeg', '-y',
+                #     '-i', str(temp_wav_file),
+                #     '-codec:a', 'libmp3lame',
+                #     '-qscale:a', '4',
+                #     str(audio_file)
+                # ], check=True)
                 
-                temp_wav_file.unlink(missing_ok=True)
-                return {"success": True, "message": "语音生成成功"}
+                # temp_wav_file.unlink(missing_ok=True)
+                try:
+                    # 确保WAV文件已经生成
+                    if not temp_wav_file.exists():
+                        raise Exception("WAV文件未生成")
+
+                    # 使用 pydub 转换为 MP3
+                    audio = AudioSegment.from_wav(str(temp_wav_file))
+                    audio.export(str(audio_file), format='mp3', parameters=["-q:a", "4"])
+
+                    # 删除临时文件
+                    temp_wav_file.unlink(missing_ok=True)
+                    
+                    return {"success": True, "message": "语音生成成功"}
+                except Exception as e:
+                    raise HTTPException(500, f"音频转换失败: {str(e)}")
             else:
                 error_details = result.properties.get(
                     speechsdk.PropertyId.SpeechServiceResponse_JsonErrorDetails
@@ -241,7 +257,7 @@ async def generate_speech_for_file(
             raise HTTPException(500, f"读取字幕文件失败: {str(e)}")
 
         # 准备音频目录
-        audio_dir = AUDIO_DIR / file_id / (target_language if not use_local_tts else "local")
+        audio_dir = AUDIO_DIR / file_id / target_language
         audio_dir.mkdir(parents=True, exist_ok=True)
 
         audio_files = []
@@ -257,40 +273,87 @@ async def generate_speech_for_file(
                     "message": f"正在生成第 {i + 1}/{total_count} 个语音",
                     "progress": progress
                 })
+                # 检查字幕文本是否为空
+                if not subtitle.get('text', '').strip():
+                    print(f"警告：第 {i + 1} 个字幕文本为空，跳过")
+                    continue
 
-                if use_local_tts:
-                    # 使用本地 TTS
-                    await generate_speech(
-                        file_id=file_id,
-                        subtitle_index=i,
-                        text=subtitle['text'],
-                        use_local_tts=True
-                    )
-                else:
-                    # 使用 Azure TTS
-                    await generate_speech(
-                        file_id=file_id,
-                        subtitle_index=i,
-                        text=subtitle['text'],
-                        voice_name=voice_name
-                    )
+                try:
+                    if use_local_tts:
+                        # 使用本地 TTS
+                        await generate_speech(
+                            file_id=file_id,
+                            subtitle_index=i,
+                            text=subtitle['text'],
+                            use_local_tts=True
+                        )
+                    else:
+                        # 使用 Azure TTS
+                        await generate_speech(
+                            file_id=file_id,
+                            subtitle_index=i,
+                            text=subtitle['text'],
+                            voice_name=voice_name
+                        )
+                except Exception as tts_error:
+                    print(f"TTS错误（第 {i + 1} 个字幕）: {str(tts_error)}")
+                    continue
 
+                # 验证生成的音频文件
                 audio_file = audio_dir / f"{i:04d}.mp3"
-                if audio_file.exists():
-                    audio_files.append({
-                        "index": i,
-                        "file": str(audio_file.relative_to(AUDIO_DIR)),
-                        "text": subtitle['text'],
-                        "start": subtitle['start'],
-                        "duration": subtitle['duration']
-                    })
+                temp_wav_file = audio_dir / f"{i:04d}_temp.wav"
+
+                # 先等待一小段时间确保文件写入完成
+                await asyncio.sleep(0.5)
+                if temp_wav_file.exists() or audio_file.exists():
+                    try:
+                        # 如果WAV文件还存在，等待转换完成
+                        if temp_wav_file.exists():
+                            retry_count = 0
+                            while retry_count < 3:  # 最多等待3次
+                                await asyncio.sleep(1)  # 等待1秒
+                                if audio_file.exists():
+                                    break
+                                retry_count += 1
+
+                        if audio_file.exists():
+                            # 检查音频文件是否有效
+                            file_size = audio_file.stat().st_size
+                            if file_size == 0:
+                                print(f"警告：第 {i + 1} 个音频文件大小为0，跳过")
+                                audio_file.unlink(missing_ok=True)
+                                continue
+
+                            audio_files.append({
+                                "index": i,
+                                "file": str(audio_file.relative_to(AUDIO_DIR)),
+                                "text": subtitle['text'],
+                                "start": subtitle['start'],
+                                "duration": subtitle['duration']
+                            })
+                        else:
+                            print(f"警告：第 {i + 1} 个音频转换可能未完成")
+                            continue
+                    except Exception as file_error:
+                        print(f"文件处理错误（第 {i + 1} 个字幕）: {str(file_error)}")
+                        continue
+                else:
+                    print(f"警告：第 {i + 1} 个音频文件未生成 (WAV或MP3均不存在)")
+                    print(f"WAV路径: {temp_wav_file}")
+                    print(f"MP3路径: {audio_file}")
 
             except Exception as e:
                 print(f"警告：处理第 {i} 个字幕时出错: {str(e)}")
                 continue
 
+
+        # 修改错误判断逻辑
         if not audio_files:
-            raise HTTPException(500, "未能生成任何语音文件")
+            error_msg = "未能生成任何语音文件"
+            print(f"错误：{error_msg}")
+            print(f"总字幕数：{total_count}")
+            print(f"音频目录：{audio_dir}")
+            raise HTTPException(500, error_msg)
 
         # 发送完成消息
         await send_message(file_id, {
