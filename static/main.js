@@ -631,10 +631,11 @@ generateSpeechBtn.addEventListener('click', async () => {
             use_local_tts: useLocalTTS.checked
         };
         
-        // 如果不是使用本地TTS，则添加voice_name
-        if (!useLocalTTS.checked) {
-            params.voice_name = voiceSelect.value;
+
+        if (!voiceSelect.value) {
+            throw new Error('请选择语音');
         }
+        params.voice_name = voiceSelect.value;
 
         console.log('生成语音参数:', params);
 
@@ -862,12 +863,12 @@ async function generateSingleSpeech(index) {
             use_local_tts: useLocalTTS.checked
         };
 
-        if (!useLocalTTS.checked) {
-            if (!voiceSelect.value) {
-                throw new Error('请选择语音');
-            }
-            params.voice_name = voiceSelect.value;
+
+        if (!voiceSelect.value) {
+            throw new Error('请选择语音');
         }
+        params.voice_name = voiceSelect.value;
+        
 
         const response = await fetch(`/generate-single-speech/${currentFileId}`, {
             method: 'POST',
@@ -886,6 +887,7 @@ async function generateSingleSpeech(index) {
         const subtitleItem = document.querySelector(`.subtitle-item[data-index="${index}"]`);
         const audioPlayer = subtitleItem.querySelector('.audio-player');
         const audio = subtitleItem.querySelector('.subtitle-audio');
+        const textDiv = subtitleItem.querySelector('.original-text');
 
         if (audioPlayer && audio) {
             const timestamp = new Date().getTime();
@@ -894,6 +896,15 @@ async function generateSingleSpeech(index) {
             source.type = 'audio/wav';
             audio.load();
             audioPlayer.style.display = 'block';
+
+            // 检查时长并更新样式
+            if (data.duration_check && data.duration_check.exceeds_duration) {
+                textDiv.classList.add('duration-warning');
+                textDiv.title = `音频时长(${data.duration_check.audio_duration.toFixed(1)}s)超出字幕时长(${data.duration_check.subtitle_duration.toFixed(1)}s) ${data.duration_check.difference_percent.toFixed(1)}%`;
+            } else {
+                textDiv.classList.remove('duration-warning');
+                textDiv.removeAttribute('title');
+            }
         }
 
         showMessage('语音生成成功', 'success');
@@ -951,8 +962,6 @@ function updateSubtitleAudio(audioFiles) {
         return;
     }
 
-    console.log(`找到 ${subtitleItems.length} 个字幕元素`);
-
     audioFiles.forEach((audioFile, index) => {
         if (!audioFile || !audioFile.file) {
             console.error(`无效的音频文件数据 [${index}]:`, audioFile);
@@ -988,8 +997,25 @@ function updateSubtitleAudio(audioFiles) {
             source.type = 'audio/wav';
             audio.load(); // 重新加载音频源
             audioPlayer.style.display = 'block';
+
+            // 添加音频加载完成事件监听器
+            audio.addEventListener('loadedmetadata', () => {
+                const audioDuration = audio.duration;
+                const subtitleDuration = subtitles[index].duration;
+                
+                // 如果音频时长超过字幕时长
+                if (audioDuration > subtitleDuration) {
+                    const diffPercent = ((audioDuration - subtitleDuration) / subtitleDuration * 100).toFixed(1);
+                    
+                    // 添加警告样式
+                    const textDiv = subtitleItem.querySelector('.original-text');
+                    if (textDiv) {
+                        textDiv.classList.add('duration-warning');
+                        textDiv.title = `音频时长(${audioDuration.toFixed(1)}s)超出字幕时长(${subtitleDuration.toFixed(1)}s) ${diffPercent}%`;
+                    }
+                }
+            });
             
-            console.log(`成功更新音频 [${index}]: ${audioPath}`);
         } catch (error) {
             console.error(`更新音频 [${index}] 时出错:`, error);
         }
@@ -1413,7 +1439,11 @@ function initializeSubtitleLoader() {
 
 // 生成一个简单的 fileId
 function generateFileId() {
-    return 'file_' + Math.random().toString(36).substr(2, 9);
+    // return 'file_' + Math.random().toString(36).substr(2, 9);
+    // 生成UUID字符串
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
 }
 
 function parseSRT(srtString) {

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, Body, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, Body, Request, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import json
@@ -67,10 +67,18 @@ async def serve_video(file_id: str):
     )
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    file_id: str = Form(None)
+):
     try:
-        file_id = await utils.save_upload_file(file)
-        return {"file_id": file_id}
+        if file_id:
+            file_id = file_id.rsplit('.', 1)[0] if '.' in file_id else file_id
+            actual_file_id = await utils.save_upload_file(file, file_id)
+        else:
+            actual_file_id = await utils.save_upload_file(file)
+        
+        return {"file_id": actual_file_id}
     except Exception as e:
         raise HTTPException(500, f"上传失败: {str(e)}")
 
@@ -355,7 +363,8 @@ async def upload_subtitles_endpoint(data: SubtitleUploadRequest):
         subtitles_data = data.subtitles
 
         # 确保字幕目录存在
-        subtitle_path = SUBTITLE_DIR / f"{file_id}.json"
+        file_id_without_ext = file_id.rsplit('.', 1)[0] if '.' in file_id else file_id
+        subtitle_path = SUBTITLE_DIR / f"{file_id_without_ext}.json"
         
         # 保存字幕数据
         with open(subtitle_path, "w", encoding="utf-8") as f:

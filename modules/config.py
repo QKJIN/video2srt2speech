@@ -122,7 +122,6 @@ SUPPORTED_VOICES = {
         {"name": "it-IT-DiegoNeural", "gender": "Male", "description": "Diego - Professional"}
     ],
     "pt-PT": [
-        {"name": "pt-PT-FernandaNeural", "gender": "Female", "description": "Fernanda - Professional"},
         {"name": "pt-PT-RaquelNeural", "gender": "Female", "description": "Raquel - Professional"},
         {"name": "pt-PT-DuarteNeural", "gender": "Male", "description": "Duarte - Professional"}
     ],

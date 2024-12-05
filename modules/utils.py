@@ -3,20 +3,40 @@ import uuid
 from pathlib import Path
 import aiofiles
 from fastapi import UploadFile, HTTPException
-from .config import UPLOAD_DIR
+from .config import UPLOAD_DIR, TEMP_DIR
 
-async def save_upload_file(file: UploadFile) -> str:
+async def save_upload_file(file: UploadFile, file_id: str = None) -> str:
     """保存上传的文件并返回文件ID"""
     try:
-        file_extension = os.path.splitext(file.filename)[1]
-        file_id = str(uuid.uuid4()) + file_extension
+        # 获取文件扩展名
+        ext = Path(file.filename).suffix
         
-        file_path = UPLOAD_DIR / file_id
-        async with aiofiles.open(file_path, "wb") as f:
-            content = await file.read()
-            await f.write(content)
+        # 如果没有提供 file_id，生成新的
+        if not file_id:
+            file_id = str(uuid.uuid4())
+            
+        # 确保 file_id 不包含扩展名
+        file_id = file_id.rsplit('.', 1)[0]
         
-        return file_id
+        # 完整的文件名（带扩展名）
+        filename = f"{file_id}{ext}"
+        
+        # 确保上传目录存在
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # 保存文件
+        file_path = UPLOAD_DIR / filename
+        
+        # 如果文件已存在，先删除
+        if file_path.exists():
+            file_path.unlink()
+            
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+            
+        return filename
+        # return file_id
     except Exception as e:
         raise HTTPException(500, f"保存文件失败: {str(e)}")
 

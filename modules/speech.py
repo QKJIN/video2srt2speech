@@ -376,6 +376,16 @@ async def generate_speech_for_file(
                                 audio_file.unlink(missing_ok=True)
                                 continue
 
+                            # 检查音频时长是否超过字幕时长
+                            audio_duration = AudioSegment.from_file(str(audio_file)).duration_seconds
+                            if audio_duration > subtitle['duration']:
+                                # 发送标记消息到前端
+                                await send_message(file_id, {
+                                    "type": "warning",
+                                    "message": f"音频时长超过字幕时长: 第 {i + 1} 个字幕",
+                                    "index": i
+                                })
+
                             audio_files.append({
                                 "index": i,
                                 "file": str(audio_file.relative_to(AUDIO_DIR)),
@@ -454,8 +464,11 @@ async def generate_speech_single(
         if index >= len(subtitles):
             raise HTTPException(400, "无效的字幕索引")
 
-        # 获取要转换的文本
-        text_to_convert = subtitles[index]["text"]
+
+        # 获取要转换的文本和字幕时长
+        subtitle = subtitles[index]
+        text_to_convert = subtitle["text"]
+        subtitle_duration = subtitle["duration"]
         
         # 如果存在翻译文件，使用翻译后的文本
         translations_file = SUBTITLE_DIR / f"{file_id}_{target_language}.json"
@@ -481,10 +494,27 @@ async def generate_speech_single(
 
         if result.get("success"):
             audio_filename = f"{index:04d}.mp3"
+            audio_path = AUDIO_DIR / file_id / target_language / audio_filename
+            
+            # 检查音频时长
+            audio = AudioSegment.from_file(str(audio_path))
+            audio_duration = audio.duration_seconds
+            
+            # 计算时长差异
+            duration_diff = audio_duration - subtitle_duration
+            diff_percent = (duration_diff / subtitle_duration) * 100
+            
             return {
                 "status": "success",
                 "audio_file": str(Path(file_id) / target_language / audio_filename),
-                "index": index
+                "index": index,
+                "duration_check": {
+                    "audio_duration": audio_duration,
+                    "subtitle_duration": subtitle_duration,
+                    "difference": duration_diff,
+                    "difference_percent": diff_percent,
+                    "exceeds_duration": audio_duration > subtitle_duration
+                }
             }
         else:
             raise HTTPException(500, "生成语音失败")
