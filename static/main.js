@@ -427,6 +427,12 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                     width: 100%;
                     margin-top: 5px;
                 }
+                .duration-warning {
+                    color: red;
+                }
+                .duration-notice {
+                    color: orange;
+                }
             `;
             document.head.appendChild(style);
         }
@@ -898,12 +904,24 @@ async function generateSingleSpeech(index) {
             audioPlayer.style.display = 'block';
 
             // 检查时长并更新样式
-            if (data.duration_check && data.duration_check.exceeds_duration) {
-                textDiv.classList.add('duration-warning');
-                textDiv.title = `音频时长(${data.duration_check.audio_duration.toFixed(1)}s)超出字幕时长(${data.duration_check.subtitle_duration.toFixed(1)}s) ${data.duration_check.difference_percent.toFixed(1)}%`;
-            } else {
-                textDiv.classList.remove('duration-warning');
-                textDiv.removeAttribute('title');
+            if (data.duration_check) {
+                const check = data.duration_check;
+                const textDiv = subtitleItem.querySelector('.original-text');
+                
+                if (check.will_affect_next) {
+                    // 会影响下一个字幕，显示红色警告
+                    textDiv.classList.add('duration-warning');
+                    textDiv.title = `音频时长(${check.audio_duration.toFixed(1)}s)超出可用时长(${check.available_duration.toFixed(1)}s)，会影响下一个字幕`;
+                } else if (check.exceeds_subtitle) {
+                    // 超出字幕时长但不会影响下一个字幕，显示黄色警告
+                    textDiv.classList.remove('duration-warning');
+                    textDiv.classList.add('duration-notice');
+                    textDiv.title = `音频时长(${check.audio_duration.toFixed(1)}s)超出字幕时长(${check.subtitle_duration.toFixed(1)}s)，但有${check.gap_duration.toFixed(1)}s的间隔可用`;
+                } else {
+                    // 时长正常
+                    textDiv.classList.remove('duration-warning', 'duration-notice');
+                    textDiv.removeAttribute('title');
+                }
             }
         }
 
@@ -1003,17 +1021,23 @@ function updateSubtitleAudio(audioFiles) {
                 const audioDuration = audio.duration;
                 const subtitleDuration = subtitles[index].duration;
                 
-                // 如果音频时长超过字幕时长
-                if (audioDuration > subtitleDuration) {
-                    const diffPercent = ((audioDuration - subtitleDuration) / subtitleDuration * 100).toFixed(1);
-                    
-                    // 添加警告样式
-                    const textDiv = subtitleItem.querySelector('.original-text');
-                    if (textDiv) {
-                        textDiv.classList.add('duration-warning');
-                        textDiv.title = `音频时长(${audioDuration.toFixed(1)}s)超出字幕时长(${subtitleDuration.toFixed(1)}s) ${diffPercent}%`;
-                    }
+                const textDiv = subtitleItem.querySelector('.original-text');
+
+                if (audioFile.will_affect_next) {
+                    // 会影响下一个字幕，显示红色警告
+                    textDiv.classList.add('duration-warning');
+                    textDiv.title = `音频时长(${audioFile.audio_duration.toFixed(1)}s)超出可用时长(${audioFile.available_duration.toFixed(1)}s)，会影响下一个字幕`;
+                } else if (audioFile.audio_duration > audioFile.duration) {
+                    // 超出字幕时长但不会影响下一个字幕，显示黄色警告
+                    textDiv.classList.remove('duration-warning');
+                    textDiv.classList.add('duration-notice');
+                    textDiv.title = `音频时长(${audioFile.audio_duration.toFixed(1)}s)超出字幕时长(${audioFile.duration.toFixed(1)}s)，但有${audioFile.gap_duration.toFixed(1)}s的间隔可用`;
+                } else {
+                    // 时长正常
+                    textDiv.classList.remove('duration-warning', 'duration-notice');
+                    textDiv.removeAttribute('title');
                 }
+
             });
             
         } catch (error) {
@@ -1514,6 +1538,5 @@ function timeToSeconds(timeString) {
         throw error;
     }
 }
-
 // 在main.js末尾调用这个初始化函数
 initializeSubtitleLoader();

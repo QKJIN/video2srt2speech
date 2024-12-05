@@ -192,7 +192,7 @@ async def recognize_speech(file_id: str, audio_path: Path, language: str = "zh-C
                 if duration < 0.1:  # 如果音频太短
                     return []  # 返回空结果
             except Exception as e:
-                print(f"音频文件验证失败: {str(e)}")
+                print(f"音频文件验��失败: {str(e)}")
                 continue
 
             speech_config = speechsdk.SpeechConfig(
@@ -299,125 +299,75 @@ async def generate_speech_for_file(
         if not subtitle_file.exists():
             raise HTTPException(404, f"未找到字幕文件")
 
-        try:
-            with open(subtitle_file, 'r', encoding='utf-8') as f:
-                subtitles = json.load(f)
-        except Exception as e:
-            raise HTTPException(500, f"读取字幕文件失败: {str(e)}")
-
-        # 准备音频目录
-        audio_dir = AUDIO_DIR / file_id / target_language
-        audio_dir.mkdir(parents=True, exist_ok=True)
+        with open(subtitle_file, 'r', encoding='utf-8') as f:
+            subtitles = json.load(f)
 
         audio_files = []
         total_count = len(subtitles)
         
         # 为每个字幕生成语音
         for i, subtitle in enumerate(subtitles):
-            try:
-                # 发送进度消息
-                progress = (i + 1) / total_count * 100
-                await send_message(file_id, {
-                    "type": "progress",
-                    "message": f"正在生成第 {i + 1}/{total_count} 个语音",
-                    "progress": progress
-                })
-                # 检查字幕文本是否为空
-                if not subtitle.get('text', '').strip():
-                    print(f"警告：第 {i + 1} 个字幕文本为空，跳过")
-                    continue
-
-                try:
-                    if use_local_tts:
-                        # 使用本地 TTS
-                        await generate_speech(
-                            file_id=file_id,
-                            subtitle_index=i,
-                            text=subtitle['text'],
-                            voice_name=voice_name,
-                            use_local_tts=True,
-                            target_language=target_language
-                        )
-                    else:
-                        # 使用 Azure TTS
-                        await generate_speech(
-                            file_id=file_id,
-                            subtitle_index=i,
-                            text=subtitle['text'],
-                            voice_name=voice_name,
-                            target_language=target_language
-                        )
-                except Exception as tts_error:
-                    print(f"TTS错误（第 {i + 1} 个字幕）: {str(tts_error)}")
-                    continue
-
-                # 验证生成的音频文件
-                audio_file = audio_dir / f"{i:04d}.mp3"
-                temp_wav_file = audio_dir / f"{i:04d}_temp.wav"
-
-                # 先等待一小段时间确保文件写入完成
-                await asyncio.sleep(0.5)
-                if temp_wav_file.exists() or audio_file.exists():
-                    try:
-                        # 如果WAV文件还存在，等待转换完成
-                        if temp_wav_file.exists():
-                            retry_count = 0
-                            while retry_count < 3:  # 最多等待3次
-                                await asyncio.sleep(1)  # 等待1秒
-                                if audio_file.exists():
-                                    break
-                                retry_count += 1
-
-                        if audio_file.exists():
-                            # 检查音频文件是否有效
-                            file_size = audio_file.stat().st_size
-                            if file_size == 0:
-                                print(f"警告：第 {i + 1} 个音频文件大小为0，跳过")
-                                audio_file.unlink(missing_ok=True)
-                                continue
-
-                            # 检查音频时长是否超过字幕时长
-                            audio_duration = AudioSegment.from_file(str(audio_file)).duration_seconds
-                            if audio_duration > subtitle['duration']:
-                                # 发送标记消息到前端
-                                await send_message(file_id, {
-                                    "type": "warning",
-                                    "message": f"音频时长超过字幕时长: 第 {i + 1} 个字幕",
-                                    "index": i
-                                })
-
-                            audio_files.append({
-                                "index": i,
-                                "file": str(audio_file.relative_to(AUDIO_DIR)),
-                                "text": subtitle['text'],
-                                "start": subtitle['start'],
-                                "duration": subtitle['duration']
-                            })
-                        else:
-                            print(f"警告：第 {i + 1} 个音频转换可能未完成")
-                            continue
-                    except Exception as file_error:
-                        print(f"文件处理错误（第 {i + 1} 个字幕）: {str(file_error)}")
-                        continue
-                else:
-                    print(f"警告：第 {i + 1} 个音频文件未生成 (WAV或MP3均不存在)")
-                    print(f"WAV路径: {temp_wav_file}")
-                    print(f"MP3路径: {audio_file}")
-
-            except Exception as e:
-                print(f"警告：处理第 {i} 个字幕时出错: {str(e)}")
+           
+            # 发送进度消息
+            progress = (i + 1) / total_count * 100
+            await send_message(file_id, {
+                "type": "progress",
+                "message": f"正在生成第 {i + 1}/{total_count} 个语音",
+                "progress": progress
+            })
+            # 检查字幕文本是否为空
+            if not subtitle.get('text', '').strip():
+                print(f"警告：第 {i + 1} 个字幕文本为空，跳过")
                 continue
 
+            # 生成音频
+            result = await generate_speech(
+                file_id=file_id,
+                subtitle_index=i,
+                text=subtitle['text'],
+                voice_name=voice_name,
+                use_local_tts=use_local_tts,
+                target_language=target_language
+            )
 
-        # 修改错误判断逻辑
+            if result.get("success"):
+                audio_filename = f"{i:04d}.mp3"
+                audio_path = AUDIO_DIR / file_id / target_language / audio_filename
+                
+                # 检查音频时长
+                audio = AudioSegment.from_file(str(audio_path))
+                audio_duration = audio.duration_seconds
+                
+                # 计算与下一个字幕的间隔
+                gap_duration = 0
+                if i < len(subtitles) - 1:
+                    next_subtitle = subtitles[i + 1]
+                    gap_duration = next_subtitle["start"] - (subtitle["start"] + subtitle["duration"])
+                
+                # 可用的总时长 = 字幕时长 + 间隔时长
+                available_duration = subtitle["duration"] + gap_duration
+                
+                # 检查是否会影响下一个字幕
+                will_affect_next = audio_duration > available_duration
+
+                audio_files.append({
+                    "index": i,
+                    "file": str(audio_path.relative_to(AUDIO_DIR)),
+                    "text": subtitle['text'],
+                    "start": subtitle['start'],
+                    "duration": subtitle['duration'],
+                    "audio_duration": audio_duration,
+                    "gap_duration": gap_duration,
+                    "available_duration": available_duration,
+                    "will_affect_next": will_affect_next
+                })
+            else:
+                print(f"生成语音失败: 第 {i + 1} 个字幕")
+                continue
+
         if not audio_files:
-            error_msg = "未能生成任何语音文件"
-            print(f"错误：{error_msg}")
-            print(f"总字幕数：{total_count}")
-            print(f"音频目录：{audio_dir}")
-            raise HTTPException(500, error_msg)
+            raise HTTPException(500, "未能生成任何语音文件")
 
-        # 发送完成消息
         await send_message(file_id, {
             "type": "complete",
             "message": "语音生成完成",
@@ -434,13 +384,12 @@ async def generate_speech_for_file(
     except Exception as e:
         error_msg = f"生成语音失败: {str(e)}"
         print(error_msg)
-        # 发送错误消息
         await send_message(file_id, {
             "type": "error",
             "message": error_msg
         })
-        raise HTTPException(500, error_msg) 
-    
+        raise HTTPException(500, error_msg)
+
 # 修改现有的 generate_speech 函数签名和实现
 async def generate_speech_single(
     file_id: str,
@@ -464,11 +413,21 @@ async def generate_speech_single(
         if index >= len(subtitles):
             raise HTTPException(400, "无效的字幕索引")
 
+        # 获取当前字幕
+        current_subtitle = subtitles[index]
+        subtitle_duration = current_subtitle["duration"]
+        
+        # 计算与下一个字幕的间隔
+        gap_duration = 0
+        if index < len(subtitles) - 1:
+            next_subtitle = subtitles[index + 1]
+            gap_duration = next_subtitle["start"] - (current_subtitle["start"] + current_subtitle["duration"])
+        
+        # 可用的总时长 = 字幕时长 + 间隔时长
+        available_duration = subtitle_duration + gap_duration
 
-        # 获取要转换的文本和字幕时长
-        subtitle = subtitles[index]
-        text_to_convert = subtitle["text"]
-        subtitle_duration = subtitle["duration"]
+        # 获取要转换的文本
+        text_to_convert = current_subtitle["text"]
         
         # 如果存在翻译文件，使用翻译后的文本
         translations_file = SUBTITLE_DIR / f"{file_id}_{target_language}.json"
@@ -478,11 +437,7 @@ async def generate_speech_single(
                 if translations[index]["text"]:
                     text_to_convert = translations[index]["text"]
 
-        # 生成音频文件名和路径
-        audio_dir = AUDIO_DIR / file_id / target_language
-        audio_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 调用现有的 generate_speech 函数
+        # 生成音频
         result = await generate_speech(
             file_id=file_id,
             subtitle_index=index,
@@ -500,9 +455,12 @@ async def generate_speech_single(
             audio = AudioSegment.from_file(str(audio_path))
             audio_duration = audio.duration_seconds
             
-            # 计算时长差异
+            # 计算时长差异（相对于字幕时长）
             duration_diff = audio_duration - subtitle_duration
             diff_percent = (duration_diff / subtitle_duration) * 100
+            
+            # 检查是否会影响下一个字幕
+            will_affect_next = audio_duration > available_duration
             
             return {
                 "status": "success",
@@ -511,9 +469,12 @@ async def generate_speech_single(
                 "duration_check": {
                     "audio_duration": audio_duration,
                     "subtitle_duration": subtitle_duration,
+                    "gap_duration": gap_duration,
+                    "available_duration": available_duration,
                     "difference": duration_diff,
                     "difference_percent": diff_percent,
-                    "exceeds_duration": audio_duration > subtitle_duration
+                    "exceeds_subtitle": audio_duration > subtitle_duration,
+                    "will_affect_next": will_affect_next
                 }
             }
         else:
