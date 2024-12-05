@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>视频字幕翻译与语音生成</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
         .sidebar {
             position: fixed;
@@ -250,6 +251,23 @@
             background-color: #f8d7da;
             border-color: #f5c6cb;
         }
+        .duration-warning {
+        color: #ff4444 !important;
+        position: relative;
+         }
+        .duration-warning:hover::after {
+            content: attr(title);
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body class="user-select-none">
@@ -364,6 +382,10 @@
                     <option value="ko">韩语</option>
                     <option value="fr">法语</option>
                     <option value="de">德语</option>
+                    <option value="es">西班牙语</option>
+                    <option value="it">意大利语</option>
+                    <option value="pt">葡萄牙语</option>
+                    <option value="ru">俄语</option>
                 </select>
             </div>
             <div class="language-control-item">
@@ -376,6 +398,10 @@
                     <option value="ko-KR">韩语</option>
                     <option value="fr-FR">法语</option>
                     <option value="de-DE">德语</option>
+                    <option value="es-ES">西班牙语</option>
+                    <option value="it-IT">意大利语</option>
+                    <option value="pt-PT">葡萄牙语</option>
+                    <option value="ru-RU">俄语</option>
                 </select>
             </div>
             <div class="language-control-item">
@@ -399,11 +425,17 @@
             </div>
             <div class="language-control-item">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="useLocalTTS">
+                    <input class="form-check-input" type="checkbox" id="useLocalTTS" checked>
                     <label class="form-check-label" for="useLocalTTS">
                         使用EDGE TTS
                     </label>
                 </div>
+                <!-- <div class="form-check"></div>
+                    <input class="form-check-input" type="checkbox" id="userAzure">
+                    <label class="form-check-label" for="userAzure">
+                        使用Azure服务
+                    </label>
+                </div> -->
             </div>
         </div>
 
@@ -413,9 +445,13 @@
             <button id="generateSpeechBtn" class="btn btn-success me-2">生成语音</button>
             <button id="mergeAudioBtn" class="btn btn-warning me-2">合并语音</button>
             <button id="burnSubtitlesBtn" class="btn btn-danger me-2">生成带字幕视频</button>
-            <button id="saveSubtitlesBtn" class="btn btn-primary" title="下载字幕文件">
+            <button id="saveSubtitlesBtn" class="btn btn-primary me-2" title="下载字幕文件">
                 <i class="fas fa-download"></i> 下载字幕
             </button>
+            <label class="btn btn-secondary me-2 mb-0" title="加载字幕文件">
+                <i class="fas fa-upload"></i> 加载字幕
+                <input type="file" id="loadSubtitlesBtn" accept=".srt,.vtt" style="display: none;">
+            </label>
         </div>
 
         <div id="mergedAudioContainer" class="mb-3" style="display: none;">
@@ -602,24 +638,21 @@
                 html += `
                     <div class="subtitle-item" data-index="${i}" data-start="${subtitle.start}">
                         <div class="subtitle-header">
-                            <div class="subtitle-info">
-                                <span class="sequence-number" data-time="${subtitle.start}">${sequenceNumber}</span>
-                                <span class="subtitle-time">${startTime} - ${endTime}</span>
-                            </div>
+                            <span class="sequence-number" data-time="${subtitle.start}">${sequenceNumber}</span>
+                            <span class="subtitle-time">${startTime} - ${endTime}</span>
                             <div class="subtitle-controls">
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="playSubtitle(${i})">
+                                <button class="btn btn-sm btn-outline-primary edit-btn">编辑</button>
+                                <button class="btn btn-sm btn-outline-success save-btn" style="display: none;">保存</button>
+                                <button class="btn btn-sm btn-outline-secondary cancel-btn" style="display: none;">取消</button>
+                                <button class="btn btn-sm btn-outline-info translate-single-btn me-1" onclick="translateSingle(${i})">翻译</button>
+                                <button class="btn btn-sm btn-outline-success generate-single-speech-btn" onclick="generateSingleSpeech(${i})">语音</button>
+                                <button class="btn btn-sm btn-outline-primary play-btn me-1" onclick="playSubtitle(${i})">
                                     <i class="fas fa-play"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-success me-1" onclick="generateSingleSpeech(${i})">
-                                    <i class="fas fa-volume-up"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-info edit-btn" data-index="${i}">
-                                    <i class="fas fa-edit"></i>
                                 </button>
                             </div>
                         </div>
                         <div class="subtitle-text">
-                            <div class="original-text" data-index="${i}" contenteditable="false">${originalText}</div>
+                            <div class="original-text" contenteditable="false" data-index="${i}">${originalText}</div>
                             <div class="translated-text"></div>
                         </div>
                         <div class="audio-player" style="display: none;">
@@ -700,6 +733,66 @@
             const ms = Math.floor((seconds % 1) * 1000);
             return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${ms.toString().padStart(3, '0')}`;
         }
+
+    // // 添加加载字幕功能
+    // document.getElementById('loadSubtitlesBtn').addEventListener('change', async function(e) {
+    //     const file = e.target.files[0];
+    //     if (!file) return;
+        
+    //     try {
+    //         showLoading();
+    //         const text = await file.text();
+    //         const subtitles = parseSRT(text);
+    //         if (subtitles && subtitles.length > 0) {
+    //             updateSubtitleEditor(subtitles);
+    //             showMessage('成功', '字幕加载成功');
+    //         } else {
+    //             throw new Error('无效的字幕文件格式');
+    //         }
+    //     } catch (error) {
+    //         console.error('加载字幕失败:', error);
+    //         showMessage('错误', '加载字幕失败: ' + error.message);
+    //     } finally {
+    //         hideLoading();
+    //         e.target.value = ''; // 清空input以允许重复选择相同文件
+    //     }
+    // });
+    //     // 解析SRT格式字幕
+    // function parseSRT(srtString) {
+    //     const subtitles = [];
+    //     const blocks = srtString.trim().split(/\n\s*\n/);
+        
+    //     for (const block of blocks) {
+    //         const lines = block.trim().split('\n');
+    //         if (lines.length < 3) continue;
+            
+    //         // 解析时间轴
+    //         const times = lines[1].split(' --> ');
+    //         if (times.length !== 2) continue;
+            
+    //         const startTime = timeToSeconds(times[0].trim());
+    //         const endTime = timeToSeconds(times[1].trim());
+            
+    //         // 合并剩余行作为字幕文本
+    //         const text = lines.slice(2).join('\n');
+            
+    //         subtitles.push({
+    //             start: startTime,
+    //             duration: endTime - startTime,
+    //             text: text
+    //         });
+    //     }
+        
+    //     return subtitles;
+    // }
+
+    // // 将SRT时间格式转换为秒
+    // function timeToSeconds(timeString) {
+    //     const [time, ms] = timeString.split(',');
+    //     const [hours, minutes, seconds] = time.split(':').map(Number);
+    //     return hours * 3600 + minutes * 60 + seconds + parseInt(ms) / 1000;
+    // }
+
     </script>
 </body>
 </html>

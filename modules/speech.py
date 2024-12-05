@@ -18,11 +18,51 @@ from .tts import tts as local_tts
 from pydub import AudioSegment
 import io
 
+
+import numpy as np
+from scipy.io import wavfile
+import soundfile as sf
+
+def trim_silence_end(audio_data, sample_rate, threshold=0.01, min_silence_duration=0.1):
+    """
+    裁剪音频末尾的静音部分
+    
+    参数:
+    - threshold: 音量阈值，低于此值视为静音
+    - min_silence_duration: 最小静音持续时间(秒)
+    """
+    # 计算音频的RMS能量
+    frame_length = int(sample_rate * 0.02)  # 20ms 帧
+    energy = np.array([
+        np.sqrt(np.mean(frame**2))
+        for frame in np.array_split(audio_data, len(audio_data) // frame_length)
+    ])
+    
+    # 从后向前查找第一个非静音帧
+    min_silence_frames = int(min_silence_duration * sample_rate / frame_length)
+    silence_count = 0
+    end_frame = len(energy) - 1
+    
+    for i in range(len(energy) - 1, -1, -1):
+        if energy[i] > threshold:
+            end_frame = i + 1  # 保留一帧过渡
+            break
+        silence_count += 1
+        if silence_count < min_silence_frames:
+            end_frame = i
+    
+    # 计算实际采样点位置
+    end_sample = min(len(audio_data), (end_frame + 1) * frame_length)
+    return audio_data[:end_sample]
+
 async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_name: str = "zh-CN-XiaoxiaoNeural", use_local_tts: bool = False, target_language: str = "en-US"):
     try:
         if use_local_tts:
             # 使用本地 TTS
-            audio_data = await local_tts.generate_speech(text)
+            audio_data = await local_tts.generate_speech(text, target_language, voice_name)
+            
+            # 裁剪末尾静音
+            trimmed_audio = trim_silence_end(audio_data, 22050)  # 22050是采样率
             
             # 准备音频文件路径
             audio_dir = AUDIO_DIR / file_id / target_language
@@ -31,8 +71,7 @@ async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_na
             audio_file = audio_dir / f"{subtitle_index:04d}.mp3"
             
             # 保存音频
-            import soundfile as sf
-            sf.write(str(audio_file), audio_data, 22050)
+            sf.write(str(audio_file), trimmed_audio, 22050)
             
             return {"success": True, "message": "本地TTS生成成功"}
         else:
@@ -76,25 +115,35 @@ async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_na
             result = speech_synthesizer.speak_text_async(text).get()
             
             if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-                # 将WAV转换为MP3
-                # subprocess.run([
-                #     'ffmpeg', '-y',
-                #     '-i', str(temp_wav_file),
-                #     '-codec:a', 'libmp3lame',
-                #     '-qscale:a', '4',
-                #     str(audio_file)
-                # ], check=True)
-                
-                # temp_wav_file.unlink(missing_ok=True)
                 try:
+                    # # 确保WAV文件已经生成
+                    # if not temp_wav_file.exists():
+                    #     raise Exception("WAV文件未生成")
+
+                    # # 使用 pydub 转换为 MP3
+                    # audio = AudioSegment.from_wav(str(temp_wav_file))
+                    # audio.export(str(audio_file), format='mp3', parameters=["-q:a", "4"])
+                    
                     # 确保WAV文件已经生成
                     if not temp_wav_file.exists():
                         raise Exception("WAV文件未生成")
 
-                    # 使用 pydub 转换为 MP3
+                    # 使用 pydub 加载 WAV 文件
                     audio = AudioSegment.from_wav(str(temp_wav_file))
-                    audio.export(str(audio_file), format='mp3', parameters=["-q:a", "4"])
+                    samples = np.array(audio.get_array_of_samples())
+                    sample_rate = audio.frame_rate
 
+                    # 裁剪静音
+                    trimmed_samples = trim_silence_end(samples, sample_rate)
+
+                    # 转换为 MP3
+                    trimmed_audio = AudioSegment(
+                        trimmed_samples.tobytes(), 
+                        frame_rate=sample_rate,
+                        sample_width=2,  # 16-bit
+                        channels=1  # mono
+                    )
+                    trimmed_audio.export(str(audio_file), format='mp3', parameters=["-q:a", "4"])
                     # 删除临时文件
                     temp_wav_file.unlink(missing_ok=True)
                     
@@ -285,7 +334,9 @@ async def generate_speech_for_file(
                             file_id=file_id,
                             subtitle_index=i,
                             text=subtitle['text'],
-                            use_local_tts=True
+                            voice_name=voice_name,
+                            use_local_tts=True,
+                            target_language=target_language
                         )
                     else:
                         # 使用 Azure TTS
@@ -293,7 +344,8 @@ async def generate_speech_for_file(
                             file_id=file_id,
                             subtitle_index=i,
                             text=subtitle['text'],
-                            voice_name=voice_name
+                            voice_name=voice_name,
+                            target_language=target_language
                         )
                 except Exception as tts_error:
                     print(f"TTS错误（第 {i + 1} 个字幕）: {str(tts_error)}")
@@ -378,3 +430,64 @@ async def generate_speech_for_file(
             "message": error_msg
         })
         raise HTTPException(500, error_msg) 
+    
+# 修改现有的 generate_speech 函数签名和实现
+async def generate_speech_single(
+    file_id: str,
+    index: int,
+    target_language: str,
+    use_local_tts: bool = False,
+    voice_name: str = None
+):
+    """为单条字幕生成语音"""
+    try:
+        file_id = file_id.rsplit('.', 1)[0] if '.' in file_id else file_id
+        subtitle_file = SUBTITLE_DIR / f"{file_id}.json"
+        
+        if not subtitle_file.exists():
+            raise HTTPException(404, "字幕文件不存在")
+
+        # 读取字幕数据
+        with open(subtitle_file, 'r', encoding='utf-8') as f:
+            subtitles = json.load(f)
+
+        if index >= len(subtitles):
+            raise HTTPException(400, "无效的字幕索引")
+
+        # 获取要转换的文本
+        text_to_convert = subtitles[index]["text"]
+        
+        # 如果存在翻译文件，使用翻译后的文本
+        translations_file = SUBTITLE_DIR / f"{file_id}_{target_language}.json"
+        if translations_file.exists():
+            with open(translations_file, 'r', encoding='utf-8') as f:
+                translations = json.load(f)
+                if translations[index]["text"]:
+                    text_to_convert = translations[index]["text"]
+
+        # 生成音频文件名和路径
+        audio_dir = AUDIO_DIR / file_id / target_language
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 调用现有的 generate_speech 函数
+        result = await generate_speech(
+            file_id=file_id,
+            subtitle_index=index,
+            text=text_to_convert,
+            voice_name=voice_name,
+            use_local_tts=use_local_tts,
+            target_language=target_language
+        )
+
+        if result.get("success"):
+            audio_filename = f"{index:04d}.mp3"
+            return {
+                "status": "success",
+                "audio_file": str(Path(file_id) / target_language / audio_filename),
+                "index": index
+            }
+        else:
+            raise HTTPException(500, "生成语音失败")
+
+    except Exception as e:
+        raise HTTPException(500, f"生成语音失败: {str(e)}")

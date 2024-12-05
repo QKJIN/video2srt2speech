@@ -43,7 +43,15 @@ LANGUAGE_CODE_MAP = {
     "fr-FR": "fr",
     "fr": "fr",
     "de-DE": "de",
-    "de": "de"
+    "de": "de",
+    "es-ES": "es",
+    "es": "es",
+    "it-IT": "it",
+    "it": "it",
+    "pt-PT": "pt",
+    "pt": "pt",
+    "ru-RU": "ru",
+    "ru": "ru"
 }
 
 # 支持的语音列表
@@ -104,6 +112,24 @@ SUPPORTED_VOICES = {
         {"name": "de-DE-HannaNeural", "gender": "Female", "description": "Hanna - Professional"},
         {"name": "de-DE-BjarneNeural", "gender": "Male", "description": "Bjarne - Professional"},
         {"name": "de-DE-BerndNeural", "gender": "Male", "description": "Bernd - Professional"}
+    ],
+    "es-ES": [
+        {"name": "es-ES-ElviraNeural", "gender": "Female", "description": "Elvira - Professional"},
+        {"name": "es-ES-AlvaroNeural", "gender": "Male", "description": "Alvaro - Professional"}
+    ],
+    "it-IT": [
+        {"name": "it-IT-IsabellaNeural", "gender": "Female", "description": "Isabella - Professional"},
+        {"name": "it-IT-DiegoNeural", "gender": "Male", "description": "Diego - Professional"}
+    ],
+    "pt-PT": [
+        {"name": "pt-PT-FernandaNeural", "gender": "Female", "description": "Fernanda - Professional"},
+        {"name": "pt-PT-RaquelNeural", "gender": "Female", "description": "Raquel - Professional"},
+        {"name": "pt-PT-DuarteNeural", "gender": "Male", "description": "Duarte - Professional"}
+    ],
+    "ru-RU": [
+        {"name": "ru-RU-DariyaNeural", "gender": "Female", "description": "Dariya - Professional"},
+        {"name": "ru-RU-SvetlanaNeural", "gender": "Female", "description": "Svetlana - Professional"},
+        {"name": "ru-RU-DmitryNeural", "gender": "Male", "description": "Dmitry - Professional"}
     ]
 }
 

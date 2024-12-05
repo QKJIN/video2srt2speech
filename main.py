@@ -19,6 +19,21 @@ from modules import (
     utils
 )
 from modules.config import DIRS, UPLOAD_DIR, SUBTITLE_DIR, TEMP_DIR, AUDIO_DIR
+from pydantic import BaseModel
+from typing import Optional
+
+# 定义请求模型
+class SingleTranslationRequest(BaseModel):
+    index: int
+    text: str
+    source_language: str
+    target_language: str
+
+class SingleSpeechRequest(BaseModel):
+    index: int
+    target_language: str
+    use_local_tts: bool = False
+    voice_name: Optional[str] = None
 
 # 创建必要的目录
 for dir_path in DIRS:
@@ -297,3 +312,64 @@ async def export_subtitles_endpoint(
             detail=f"导出字幕失败: {str(e)}"
         )
 
+
+
+
+@app.post("/translate-single/{file_id}")
+async def translate_single_subtitle_endpoint(
+    file_id: str,
+    request: SingleTranslationRequest
+):
+    return await translation.translate_single_subtitle(
+        file_id=file_id,
+        index=request.index,
+        text=request.text,
+        source_language=request.source_language,
+        target_language=request.target_language
+    )
+
+@app.post("/generate-single-speech/{file_id}")
+async def generate_single_speech_endpoint(
+    file_id: str,
+    request: SingleSpeechRequest
+):
+    return await speech.generate_speech_single(
+        file_id=file_id,
+        index=request.index,
+        target_language=request.target_language,
+        use_local_tts=request.use_local_tts,
+        voice_name=request.voice_name
+    )
+
+
+# 添加新的请求模型
+class SubtitleUploadRequest(BaseModel):
+    file_id: str
+    subtitles: list[dict]
+
+@app.post("/upload-subtitles")
+async def upload_subtitles_endpoint(data: SubtitleUploadRequest):
+    """处理字幕上传请求"""
+    try:
+        file_id = data.file_id
+        subtitles_data = data.subtitles
+
+        # 确保字幕目录存在
+        subtitle_path = SUBTITLE_DIR / f"{file_id}.json"
+        
+        # 保存字幕数据
+        with open(subtitle_path, "w", encoding="utf-8") as f:
+            json.dump(subtitles_data, f, ensure_ascii=False, indent=2)
+
+        return {
+            "status": "success",
+            "message": "字幕上传成功",
+            "file_id": file_id
+        }
+
+    except Exception as e:
+        print(f"字幕上传失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"字幕上传失败: {str(e)}"
+        )

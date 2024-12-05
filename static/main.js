@@ -166,6 +166,11 @@ uploadBtn.addEventListener('click', async () => {
         const formData = new FormData();
         formData.append('file', file);
 
+        // 如果存在 currentFileId，添加到请求中
+        if (currentFileId) {
+            formData.append('file_id', currentFileId);
+        }
+
         const response = await fetch('/upload', {
             method: 'POST',
             body: formData
@@ -177,7 +182,9 @@ uploadBtn.addEventListener('click', async () => {
 
         const data = await response.json();
         console.log('上传成功，文件ID:', data.file_id);
-        
+
+        // 更新 currentFileId（无论是新的还是现有的）
+        currentFileId = data.file_id;
         displayVideo(data.file_id);
 
         await extractAudio(data.file_id);
@@ -333,6 +340,8 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                             <button class="btn btn-sm btn-outline-primary edit-btn">编辑</button>
                             <button class="btn btn-sm btn-outline-success save-btn" style="display: none;">保存</button>
                             <button class="btn btn-sm btn-outline-secondary cancel-btn" style="display: none;">取消</button>
+                            <button class="btn btn-sm btn-outline-info translate-single-btn me-1" onclick="translateSingle(${i})">翻译</button>
+                            <button class="btn btn-sm btn-outline-success generate-single-speech-btn" onclick="generateSingleSpeech(${i})">语音</button>
                         </div>
                     </div>
                     <div class="subtitle-text">
@@ -684,6 +693,28 @@ mergeAudioBtn.addEventListener('click', async () => {
         const data = await response.json();
         if (data.merged_file) {
             displayMergedAudio(data.merged_file);
+            
+            // 处理时长警告
+            if (data.duration_warnings && data.duration_warnings.length > 0) {
+                // 先清除所有之前的警告标记
+                document.querySelectorAll('.subtitle-item').forEach(item => {
+                    item.querySelector('.original-text')?.classList.remove('duration-warning');
+                });
+                
+                // 标记有问题的字幕
+                data.duration_warnings.forEach(warning => {
+                    const subtitleItem = document.querySelector(`.subtitle-item[data-index="${warning.index}"]`);
+                    if (subtitleItem) {
+                        const originalText = subtitleItem.querySelector('.original-text');
+                        if (originalText) {
+                            originalText.classList.add('duration-warning');
+                            originalText.title = `音频时长(${warning.audio_duration}s)超出字幕时长(${warning.subtitle_duration}s)${warning.diff_percent}%`;
+                        }
+                    }
+                });
+                
+                showMessage(`⚠️ 发现${data.duration_warnings.length}条字幕的音频时长异常，已标记为红色`, 'warning');
+            }
         } else {
             throw new Error('未找到合并后的音频文件');
         }
@@ -765,6 +796,115 @@ burnSubtitlesBtn.addEventListener('click', async () => {
         hideLoading();
     }
 });
+
+
+// 添加单条字幕翻译函数
+async function translateSingle(index) {
+    if (!currentFileId || !subtitles || !subtitles[index]) {
+        showMessage('错误', '无效的字幕数据');
+        return;
+    }
+
+    try {
+        showLoading();
+        const sourceLanguageValue = sourceLanguage.value;
+        const targetLanguageValue = targetLanguage.value;
+
+        const response = await fetch(`/translate-single/${currentFileId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                index: index,
+                text: subtitles[index].text,
+                source_language: sourceLanguageValue,
+                target_language: targetLanguageValue
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || '翻译失败');
+        }
+
+        // 更新单条翻译
+        const subtitleItem = document.querySelector(`.subtitle-item[data-index="${index}"]`);
+        const translatedTextDiv = subtitleItem.querySelector('.translated-text');
+        translatedTextDiv.textContent = data.translated_text;
+        translatedTextDiv.style.display = 'block';
+
+        // 更新全局翻译数据
+        if (!translations) translations = new Array(subtitles.length);
+        translations[index] = { text: data.translated_text };
+
+        showMessage('翻译成功', 'success');
+    } catch (error) {
+        console.error('翻译错误:', error);
+        showMessage('错误', '翻译失败: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+// 添加单条语音生成函数
+async function generateSingleSpeech(index) {
+    if (!currentFileId || !subtitles || !subtitles[index]) {
+        showMessage('错误', '无效的字幕数据');
+        return;
+    }
+
+    try {
+        showLoading();
+        const params = {
+            index: index,
+            target_language: targetLanguage.value,
+            use_local_tts: useLocalTTS.checked
+        };
+
+        if (!useLocalTTS.checked) {
+            if (!voiceSelect.value) {
+                throw new Error('请选择语音');
+            }
+            params.voice_name = voiceSelect.value;
+        }
+
+        const response = await fetch(`/generate-single-speech/${currentFileId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(params)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || '生成语音失败');
+        }
+
+        // 更新音频播放器
+        const subtitleItem = document.querySelector(`.subtitle-item[data-index="${index}"]`);
+        const audioPlayer = subtitleItem.querySelector('.audio-player');
+        const audio = subtitleItem.querySelector('.subtitle-audio');
+
+        if (audioPlayer && audio) {
+            const timestamp = new Date().getTime();
+            const source = audio.querySelector('source');
+            source.src = `/audio/${data.audio_file}?t=${timestamp}`;
+            source.type = 'audio/wav';
+            audio.load();
+            audioPlayer.style.display = 'block';
+        }
+
+        showMessage('语音生成成功', 'success');
+    } catch (error) {
+        console.error('生成语音错误:', error);
+        showMessage('错误', '生成语音失败: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
 
 // 保存字幕
 saveSubtitlesBtn.addEventListener('click', async () => {
@@ -1208,3 +1348,142 @@ function showMessage(message, type = 'info') {
     }, 3000);
 }
 
+// 初始化加载字幕功能
+function initializeSubtitleLoader() {
+    const loadSubtitlesBtn = document.getElementById('loadSubtitlesBtn');
+    if (loadSubtitlesBtn) {
+        loadSubtitlesBtn.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            try {
+                showLoading();
+                const text = await file.text();
+                const loadedSubtitles = parseSRT(text);
+                if (loadedSubtitles && loadedSubtitles.length > 0) {
+                    // 使用现有的 fileId，如果没有则生成新的
+                    const fileId = currentFileId || generateFileId();
+                    currentFileId = fileId;
+                    
+                    // 上传字幕到后端
+                    const response = await fetch('/upload-subtitles', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            file_id: fileId,
+                            subtitles: loadedSubtitles
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('字幕上传失败');
+                    }
+
+                    const result = await response.json();
+                    console.log('字幕上传成功:', result);
+
+                    // 更新全局字幕数据
+                    subtitles = loadedSubtitles;
+                    translations = null;
+
+                    // 显示字幕
+                    await displaySubtitles(fileId, subtitles);
+
+                    // 启用相关按钮
+                    if (translateBtn) translateBtn.disabled = false;
+                    if (generateSpeechBtn) generateSpeechBtn.disabled = false;
+                    if (burnSubtitlesBtn) burnSubtitlesBtn.disabled = false;
+
+                    showMessage('字幕加载成功', 'success');
+                } else {
+                    throw new Error('无效的字幕文件格式');
+                }
+            } catch (error) {
+                console.error('加载字幕失败:', error);
+                showMessage('加载字幕失败: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+                e.target.value = '';
+            }
+        });
+    }
+}
+
+// 生成一个简单的 fileId
+function generateFileId() {
+    return 'file_' + Math.random().toString(36).substr(2, 9);
+}
+
+function parseSRT(srtString) {
+    if (!srtString || typeof srtString !== 'string') {
+        console.error('无效的SRT字符串:', srtString);
+        throw new Error('无效的字幕文件内容');
+    }
+
+    const subtitles = [];
+    const blocks = srtString.trim().split(/\n\s*\n/);
+    console.log(`找到 ${blocks.length} 个字幕块`); // 调试日志
+
+    for (const block of blocks) {
+        try {
+            const lines = block.trim().split('\n');
+            if (lines.length < 3) {
+                console.log('跳过无效字幕块:', block);
+                continue;
+            }
+            
+            // 解析时间轴
+            const times = lines[1].split(' --> ');
+            if (times.length !== 2) {
+                console.log('无效的时间格式:', lines[1]);
+                continue;
+            }
+            
+            const startTime = timeToSeconds(times[0].trim());
+            const endTime = timeToSeconds(times[1].trim());
+            
+            if (isNaN(startTime) || isNaN(endTime)) {
+                console.log('无效的时间值:', times[0], times[1]);
+                continue;
+            }
+            
+            // 合并剩余行作为字幕文本
+            const text = lines.slice(2).join('\n');
+            
+            subtitles.push({
+                start: startTime,
+                duration: endTime - startTime,
+                text: text
+            });
+        } catch (error) {
+            console.error('解析字幕块时出错:', error, block);
+        }
+    }
+
+    console.log(`成功解析 ${subtitles.length} 条字幕`); // 调试日志
+    return subtitles;
+}
+
+function timeToSeconds(timeString) {
+    try {
+        const [time, ms] = timeString.split(',');
+        if (!time || !ms) {
+            throw new Error('无效的时间格式');
+        }
+
+        const [hours, minutes, seconds] = time.split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes) || isNaN(seconds) || isNaN(parseInt(ms))) {
+            throw new Error('无效的时间值');
+        }
+
+        return hours * 3600 + minutes * 60 + seconds + parseInt(ms) / 1000;
+    } catch (error) {
+        console.error('时间转换错误:', error, timeString);
+        throw error;
+    }
+}
+
+// 在main.js末尾调用这个初始化函数
+initializeSubtitleLoader();

@@ -22,6 +22,8 @@ class EdgeTTS:
             "de": "de-DE-KatjaNeural",     # 德语
             "es": "es-ES-ElviraNeural",    # 西班牙语
             "ru": "ru-RU-SvetlanaNeural",  # 俄语
+            "it": "it-IT-DiegoNeural",     # 意大利语
+            "pt": "pt-PT-DuarteNeural",   # 葡萄牙语
         }
         
         # 语言代码映射
@@ -34,6 +36,8 @@ class EdgeTTS:
             "de": "de-DE",
             "es": "es-ES",
             "ru": "ru-RU",
+            "it": "it-IT",
+            "pt": "pt-PT",
             # 添加语言代码转换
             "zh-CN": "zh-CN",
             "en-US": "en-US",
@@ -42,6 +46,8 @@ class EdgeTTS:
             "fr-FR": "fr-FR",
             "de-DE": "de-DE",
             "es-ES": "es-ES",
+            "it-IT": "it-IT",
+            "pt-PT": "pt-PT",
             "ru-RU": "ru-RU",
         }
 
