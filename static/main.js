@@ -1,3 +1,4 @@
+
 const MODEL_MAP = {
     'whisper-tiny': 'whisper_tiny',
     'whisper-base': 'whisper_base',
@@ -318,6 +319,7 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
         let html = '<div class="subtitle-list">';
         
         for (let i = 0; i < subtitleData.length; i++) {
+
             const subtitle = subtitleData[i];
             const translation = translationData && translationData[i] ? translationData[i] : null;
 
@@ -331,6 +333,11 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
             const originalText = subtitle.text || '';
             const sequenceNumber = (i + 1).toString().padStart(3, '0');
             
+            // 修改 subtitle-controls 部分，添加语速选择
+            const speedOptions = [1.0, 1.2, 1.5, 1.75].map(speed => 
+                `<option value="${speed}">${speed}x</option>`
+            ).join('');
+
             html += `
                 <div class="subtitle-item" data-index="${i}" data-start="${subtitle.start}">
                     <div class="subtitle-header">
@@ -341,8 +348,12 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                             <button class="btn btn-sm btn-outline-success save-btn" style="display: none;">保存</button>
                             <button class="btn btn-sm btn-outline-secondary cancel-btn" style="display: none;">取消</button>
                             <button class="btn btn-sm btn-outline-info translate-single-btn me-1" onclick="translateSingle(${i})">翻译</button>
-                            <button class="btn btn-sm btn-outline-success generate-single-speech-btn" onclick="generateSingleSpeech(${i})">语音</button>
-                        </div>
+                            <div class="speech-controls">
+                                <button class="btn btn-sm btn-outline-success generate-single-speech-btn" onclick="generateSingleSpeech(${i})">语音</button>
+                                <select class="speed-control" onchange="adjustSpeed(${i}, this.value)">
+                                    ${speedOptions}
+                                </select>
+                            </div>                       </div>
                     </div>
                     <div class="subtitle-text">
                         <div class="original-text" contenteditable="false">${originalText}</div>
@@ -863,10 +874,15 @@ async function generateSingleSpeech(index) {
 
     try {
         showLoading();
+        const subtitleItem = document.querySelector(`.subtitle-item[data-index="${index}"]`);
+        const speedControl = subtitleItem.querySelector('.speed-control');
+        const currentSpeed = parseFloat(speedControl.value) || 1.0;  // 获取当前选择的语速，默认1.0
+
         const params = {
             index: index,
             target_language: targetLanguage.value,
-            use_local_tts: useLocalTTS.checked
+            use_local_tts: useLocalTTS.checked,
+            speed: currentSpeed  // 使用选择的语速
         };
 
 
@@ -890,7 +906,7 @@ async function generateSingleSpeech(index) {
         }
 
         // 更新音频播放器
-        const subtitleItem = document.querySelector(`.subtitle-item[data-index="${index}"]`);
+        // const subtitleItem = document.querySelector(`.subtitle-item[data-index="${index}"]`);
         const audioPlayer = subtitleItem.querySelector('.audio-player');
         const audio = subtitleItem.querySelector('.subtitle-audio');
         const textDiv = subtitleItem.querySelector('.original-text');
@@ -1017,7 +1033,7 @@ function updateSubtitleAudio(audioFiles) {
             audioPlayer.style.display = 'block';
 
             // 添加音频加载完成事件监听器
-            audio.addEventListener('loadedmetadata', () => {
+            // audio.addEventListener('loadedmetadata', () => {
                 const audioDuration = audio.duration;
                 const subtitleDuration = subtitles[index].duration;
                 
@@ -1038,7 +1054,7 @@ function updateSubtitleAudio(audioFiles) {
                     textDiv.removeAttribute('title');
                 }
 
-            });
+            // });
             
         } catch (error) {
             console.error(`更新音频 [${index}] 时出错:`, error);
@@ -1538,5 +1554,209 @@ function timeToSeconds(timeString) {
         throw error;
     }
 }
+
+function createSpeedControl(index, currentSpeed = 1.0) {
+    const speeds = [1.0, 1.2, 1.5, 1.75];
+    const select = document.createElement('select');
+    select.className = 'speed-control';
+    select.style.marginLeft = '8px';
+    select.style.padding = '2px';
+    select.style.borderRadius = '4px';
+    
+    speeds.forEach(speed => {
+        const option = document.createElement('option');
+        option.value = speed;
+        option.text = `${speed}x`;
+        option.selected = speed === currentSpeed;
+        select.appendChild(option);
+    });
+    
+    select.addEventListener('change', async function() {
+        const newSpeed = parseFloat(this.value);
+        try {
+            showLoading();
+            const response = await fetch(`/generate-single-speech/${currentFileId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    index: index,
+                    target_language: targetLanguage.value,
+                    use_local_tts: useLocalTTS.checked,
+                    voice_name: voiceSelect.value,
+                    speed: newSpeed
+                })
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                // 更新音频播放器
+                const subtitleItem = document.querySelector(`.subtitle-item[data-index="${index}"]`);
+                const audio = subtitleItem.querySelector('.subtitle-audio');
+                if (audio) {
+                    const source = audio.querySelector('source');
+                    const timestamp = new Date().getTime();
+                    source.src = `/audio/${data.audio_file}?t=${timestamp}`;
+                    audio.load();
+                }
+
+                // 更新时长警告
+                updateDurationWarning(subtitleItem, data.duration_check);
+                
+                showMessage('语速调整成功', 'success');
+            } else {
+                throw new Error(data.detail || '调整语速失败');
+            }
+        } catch (error) {
+            console.error('调整语速失败:', error);
+            showMessage('调整语速失败: ' + error.message, 'error');
+        } finally {
+            hideLoading();
+        }
+    });
+    
+    return select;
+}
+
+function updateSubtitleControls(subtitleItem, index) {
+    const controlsDiv = subtitleItem.querySelector('.subtitle-controls') || document.createElement('div');
+    controlsDiv.className = 'subtitle-controls';
+    controlsDiv.style.display = 'flex';
+    controlsDiv.style.alignItems = 'center';
+    controlsDiv.style.marginTop = '4px';
+
+    // 保留现有的生成语音按钮
+    const generateBtn = controlsDiv.querySelector('.generate-speech-btn') || document.createElement('button');
+    generateBtn.className = 'generate-speech-btn btn btn-sm btn-primary';
+    generateBtn.textContent = '生成语音';
+    generateBtn.onclick = () => generateSingleSpeech(index);
+
+    // 添加语速控制
+    const speedControl = createSpeedControl(index);
+    
+    // 清空并重新添加控件
+    controlsDiv.innerHTML = '';
+    controlsDiv.appendChild(generateBtn);
+    controlsDiv.appendChild(speedControl);
+
+    // 如果还没有添加到字幕项，则添加
+    if (!subtitleItem.querySelector('.subtitle-controls')) {
+        subtitleItem.appendChild(controlsDiv);
+    }
+}
+
+function updateDurationWarning(subtitleItem, durationCheck) {
+    const textDiv = subtitleItem.querySelector('.original-text');
+    if (durationCheck.will_affect_next) {
+        textDiv.classList.add('duration-warning');
+        textDiv.classList.remove('duration-notice');
+        textDiv.title = `音频时长(${durationCheck.audio_duration.toFixed(1)}s)超出可用时长(${durationCheck.available_duration.toFixed(1)}s)，会影响下一个字幕`;
+    } else if (durationCheck.exceeds_subtitle) {
+        textDiv.classList.add('duration-notice');
+        textDiv.classList.remove('duration-warning');
+        textDiv.title = `音频时长(${durationCheck.audio_duration.toFixed(1)}s)超出字幕时长(${durationCheck.subtitle_duration.toFixed(1)}s)，但有${durationCheck.gap_duration.toFixed(1)}s的间隔可用`;
+    } else {
+        textDiv.classList.remove('duration-warning', 'duration-notice');
+        textDiv.removeAttribute('title');
+    }
+}
+
+// 添加调整语速的函数
+async function adjustSpeed(index, speed) {
+    try {
+        showLoading();
+        const response = await fetch(`/generate-single-speech/${currentFileId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                index: index,
+                target_language: targetLanguage.value,
+                use_local_tts: useLocalTTS.checked,
+                voice_name: voiceSelect.value,
+                speed: parseFloat(speed)
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || '调整语速失败');
+        }
+
+        // 更新音频播放器
+        const subtitleItem = document.querySelector(`.subtitle-item[data-index="${index}"]`);
+        const audio = subtitleItem.querySelector('.subtitle-audio');
+        if (audio) {
+            const source = audio.querySelector('source');
+            const timestamp = new Date().getTime();
+            source.src = `/audio/${data.audio_file}?t=${timestamp}`;
+            audio.load();
+            subtitleItem.querySelector('.audio-player').style.display = 'block';
+        }
+
+        if (data.duration_check) {
+        // if (data && data.duration_check && typeof data.duration_check === 'object') {
+
+            const textDiv = subtitleItem.querySelector('.original-text');
+            // 1. 精确确认 textDiv 指向的元素
+            console.log('初始状态元素', textDiv);
+            
+            if (data.duration_check.will_affect_next) {
+                console.log('Adding warning class'); // 调试日志
+                textDiv.classList.add('duration-warning');
+                textDiv.setAttribute('title', 
+                    `音频时长(${data.duration_check.audio_duration.toFixed(1)}s)超出可用时长(${data.duration_check.available_duration.toFixed(1)}s)，会影响下一个字幕`
+                );
+            } else if (data.duration_check.exceeds_subtitle) {
+                console.log('Adding notice class'); // 调试日志
+                textDiv.classList.add('duration-notice');
+                textDiv.setAttribute('title',
+                    `音频时长(${data.duration_check.audio_duration.toFixed(1)}s)超出字幕时长(${data.duration_check.subtitle_duration.toFixed(1)}s)，但有${data.duration_check.gap_duration.toFixed(1)}s的间隔可用`
+                );
+            } else {
+                console.log('清除前的元素状态:', {
+                    classList: Array.from(textDiv.classList),
+                    className: textDiv.className,
+                    attributes: Array.from(textDiv.attributes).map(attr => ({
+                        name: attr.name,
+                        value: attr.value
+                    })),
+                });
+                console.log('开始清除样式');
+
+                // 移除音频加载事件监听器
+                const audio = subtitleItem.querySelector('.subtitle-audio');
+                if (audio) {
+                    audio.removeEventListener('loadedmetadata', null);
+                }
+    
+                textDiv.classList.remove('duration-warning', 'duration-notice');
+                textDiv.removeAttribute('title');
+                void textDiv.offsetWidth; // 强制重新渲染
+                
+                // 添加调试信息
+                console.log('替换后的元素状态:', {
+                    classList: Array.from(textDiv.classList),
+                    className: textDiv.className,
+                    attributes: Array.from(textDiv.attributes).map(attr => ({
+                        name: attr.name,
+                        value: attr.value
+                    }))
+                });
+            }
+        }
+
+
+        showMessage('语速调整成功', 'success');
+    } catch (error) {
+        console.error('调整语速失败:', error);
+        showMessage('调整语速失败: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
 // 在main.js末尾调用这个初始化函数
 initializeSubtitleLoader();

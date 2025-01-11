@@ -41,20 +41,21 @@
             transition: background-color 0.3s;
         }
         
-        .video-container {
+        /* .video-container {
             position: relative;
             width: 100%;
             margin-bottom: 20px;
             background-color: #000;
-        }
+        } */
         
-        .video-wrapper {
+        /* .video-wrapper {
             position: relative;
             width: 100%;
-            padding-top: 56.25%; /* 16:9 宽高比 */
-        }
+            padding-top: 56.25%; 
+            16:9 宽高比
+        } */
         
-        #videoPlayer {
+        /* #videoPlayer {
             position: absolute;
             top: 0;
             left: 0;
@@ -63,8 +64,35 @@
             z-index: 1;
             background-color: #000;
             outline: none;
-        }
+        } */
         
+        /* 修改视频容器样式 */
+        .video-container {
+            position: relative;
+            width: 100%;
+            margin-bottom: 20px;
+            background-color: #000;
+            display: flex;
+            justify-content: center;  /* 水平居中 */
+            align-items: center;      /* 垂直居中 */
+        }
+
+        .video-wrapper {
+            position: relative;
+            width: 50%;  /* 适应视频实际宽度 */
+            height: fit-content; /* 适应视频实际高度 */
+            margin: auto;        /* 居中 */
+            max-width: 100%;         /* 最大宽度为50% */
+        }
+
+        #videoPlayer {
+            /* width: auto;        自动宽度 */
+            /* height: 50%;       自动高度 */
+            /* max-width: 100%;    /* 最大宽度 */
+            /* max-height: 100%;   最大高度 */ 
+            object-fit: contain; /* 保持视频比例 */
+        }
+
         #videoPlayer::-webkit-media-controls-timeline {
             display: flex !important;
         }
@@ -78,8 +106,45 @@
             display: flex !important;
             opacity: 1 !important;
         }
+
         
-        .subtitle-overlay {
+        #subtitledVideo {
+            object-fit: contain;
+        }
+        
+        #subtitledVideo::-webkit-media-controls-timeline {
+            display: flex !important;
+        }
+        
+        #subtitledVideo::-webkit-media-controls {
+            display: flex !important;
+            opacity: 1 !important;
+        }
+        
+        #subtitledVideo::-webkit-media-controls-enclosure {
+            display: flex !important;
+            opacity: 1 !important;
+        }
+
+        .subtitledVideocontainer {
+            position: relative;
+            width: 100%;
+            margin-bottom: 20px;
+            background-color: #000;
+            display: flex;
+            justify-content: center;  /* 水平居中 */
+            align-items: center;      /* 垂直居中 */
+        }
+        
+        .subtitledVideo-wrapper {
+            position: relative;
+            width: 50%;  /* 适应视频实际宽度 */
+            height: fit-content; /* 适应视频实际高度 */
+            margin: auto;        /* 居中 */
+            max-width: 100%;         /* 最大宽度为50% */
+        }
+
+        /* .subtitle-overlay {
             position: absolute;
             bottom: 10%;
             left: 5%;
@@ -88,6 +153,22 @@
             z-index: 2;
             pointer-events: none;
             padding: 10px;
+        } */
+        .subtitle-overlay {
+            position: absolute;
+            bottom: 10%;
+            left: 50%;
+            transform: translateX(-53%);
+            width: 100%;
+            
+            text-align: center;
+            z-index: 2;
+            pointer-events: none;
+            padding: 10px;
+            overflow-wrap: break-word;
+            aspect-ratio: auto;
+            object-fit: contain;
+            display: inline-block;
         }
         
         .subtitle-editor {
@@ -125,12 +206,6 @@
             flex: 1;
         }
         
-        .video-wrapper {
-            position: relative;
-            width: 100%;
-            max-width: 100%;
-            background: #000;
-        }
         
         .video-wrapper video {
             width: 100%;
@@ -293,6 +368,20 @@
             white-space: nowrap;
             z-index: 1000;
         }
+        .speed-control {
+            font-size: 12px;
+            border: 1px solid #ddd;
+            background-color: white;
+            cursor: pointer;
+        }
+
+        .speed-control:hover {
+            border-color: #aaa;
+        }
+
+        .subtitle-controls {
+            gap: 8px;
+        }
     </style>
 </head>
 <body class="user-select-none">
@@ -332,7 +421,7 @@
                         <div class="col-md-4">
                             <label class="form-label">字体大小</label>
                             <div class="input-group">
-                                <input type="number" class="form-control" id="subtitleFontSize" value="24" min="12" max="72">
+                                <input type="number" class="form-control" id="subtitleFontSize" value="15" min="12" max="72">
                                 <span class="input-group-text">px</span>
                             </div>
                         </div>
@@ -350,12 +439,12 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">字体描边颜色</label>
-                            <input type="color" class="form-control form-control-color" id="subtitleStrokeColor" value="#000000">
+                            <input type="color" class="form-control form-control-color" id="subtitleStrokeColor" value="#ffffff">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">字体描边宽度</label>
                             <div class="input-group">
-                                <input type="number" class="form-control" id="subtitleStrokeWidth" value="2" min="0" max="10" step="0.5">
+                                <input type="number" class="form-control" id="subtitleStrokeWidth" value="1" min="0" max="10" step="0.5">
                                 <span class="input-group-text">px</span>
                             </div>
                         </div>
@@ -495,7 +584,7 @@
                 <div class="card-header">
                     <h6 class="mb-0">带字幕的视频预览</h6>
                 </div>
-                <div class="card-body">
+                <div class="subtitledVideo-wrapper">
                     <video id="subtitledVideo" controls class="w-100">
                         您的浏览器不支持 HTML5 视频播放。
                     </video>
@@ -759,64 +848,7 @@
             return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${ms.toString().padStart(3, '0')}`;
         }
 
-    // // 添加加载字幕功能
-    // document.getElementById('loadSubtitlesBtn').addEventListener('change', async function(e) {
-    //     const file = e.target.files[0];
-    //     if (!file) return;
-        
-    //     try {
-    //         showLoading();
-    //         const text = await file.text();
-    //         const subtitles = parseSRT(text);
-    //         if (subtitles && subtitles.length > 0) {
-    //             updateSubtitleEditor(subtitles);
-    //             showMessage('成功', '字幕加载成功');
-    //         } else {
-    //             throw new Error('无效的字幕文件格式');
-    //         }
-    //     } catch (error) {
-    //         console.error('加载字幕失败:', error);
-    //         showMessage('错误', '加载字幕失败: ' + error.message);
-    //     } finally {
-    //         hideLoading();
-    //         e.target.value = ''; // 清空input以允许重复选择相同文件
-    //     }
-    // });
-    //     // 解析SRT格式字幕
-    // function parseSRT(srtString) {
-    //     const subtitles = [];
-    //     const blocks = srtString.trim().split(/\n\s*\n/);
-        
-    //     for (const block of blocks) {
-    //         const lines = block.trim().split('\n');
-    //         if (lines.length < 3) continue;
-            
-    //         // 解析时间轴
-    //         const times = lines[1].split(' --> ');
-    //         if (times.length !== 2) continue;
-            
-    //         const startTime = timeToSeconds(times[0].trim());
-    //         const endTime = timeToSeconds(times[1].trim());
-            
-    //         // 合并剩余行作为字幕文本
-    //         const text = lines.slice(2).join('\n');
-            
-    //         subtitles.push({
-    //             start: startTime,
-    //             duration: endTime - startTime,
-    //             text: text
-    //         });
-    //     }
-        
-    //     return subtitles;
-    // }
 
-    // // 将SRT时间格式转换为秒
-    // function timeToSeconds(timeString) {
-    //     const [time, ms] = timeString.split(',');
-    //     const [hours, minutes, seconds] = time.split(':').map(Number);
-    //     return hours * 3600 + minutes * 60 + seconds + parseInt(ms) / 1000;
-    // }
 
     </script>
 </body>

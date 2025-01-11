@@ -56,12 +56,13 @@ class EdgeTTS:
         lang, _ = langid.classify(text)
         return self.language_codes.get(lang, "en-US")  # 默认使用英语
     
-    async def generate_speech(self, text: str, language: str = None, voice_name: str = None):
+    async def generate_speech(self, text: str, language: str = None, voice_name: str = None, speed: float = 1.0):
         """生成语音
         Args:
             text: 要转换的文本
             language: 语言代码 (zh-CN, en-US, etc.)
             voice_name: 指定的声音名称
+            speed: 语速 (0.5-2.0)
         """
         try:
             # 如果没有指定语言，自动检测
@@ -82,7 +83,14 @@ class EdgeTTS:
             temp_file = io.BytesIO()
             
             # 生成音频
-            communicate = edge_tts.Communicate(text, voice_name)
+            print('speed is {0}'.format(speed))
+            communicate = edge_tts.Communicate(
+                text, 
+                voice_name, 
+                rate=f"+{int((speed-1)*100)}%"  # 格式应为 "+0%", "+50%", "-50%" 等
+            )
+            # edge-tts 使用百分比字符串来表示语速
+            
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     temp_file.write(chunk["data"])

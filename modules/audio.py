@@ -247,14 +247,39 @@ async def merge_audio(file_id: str, target_language: str):
             
             # 构建过滤器命令
             filter_parts = []
+
             for i, (_, start_time, target_duration) in enumerate(input_files):
+                # 获取当前音频文件的实际时长
+                current_audio = input_files[i][0]
+                actual_duration = get_audio_duration(current_audio)
+                
+                # 计算到下一个字幕的间隔时间
+                next_start = input_files[i + 1][1] if i + 1 < len(input_files) else total_duration
+                available_gap = next_start - (start_time + target_duration)
+                
+                # 决定最终使用的音频时长
+                if actual_duration > target_duration and available_gap > 0:
+                    # 如果音频超长且有间隔时间，使用实际音频时长和可用间隔中的较小值
+                    final_duration = min(actual_duration, target_duration + available_gap)
+                else:
+                    # 否则使用目标时长
+                    final_duration = target_duration
+                
                 filter_parts.append(
                     f'[{i}:a]'
-                    f'atrim=0:{target_duration},'
+                    f'atrim=0:{final_duration},'  # 使用计算后的最终时长
                     f'adelay={int(start_time*1000)}|{int(start_time*1000)}:all=1'
                     f'[delayed{i}];'
                 )
-            
+                
+                logger.info(f"处理音频 {i}:")
+                logger.info(f"- 开始时间: {start_time:.3f}s")
+                logger.info(f"- 目标时长: {target_duration:.3f}s")
+                logger.info(f"- 实际时长: {actual_duration:.3f}s")
+                logger.info(f"- 可用间隔: {available_gap:.3f}s")
+                logger.info(f"- 最终时长: {final_duration:.3f}s")
+
+
             # 合并所有音频轨道
             filter_complex = ''.join(filter_parts)
             merge_cmd = ''.join(f'[delayed{i}]' for i in range(len(input_files)))

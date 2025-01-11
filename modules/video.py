@@ -47,6 +47,7 @@ def convert_subtitle_style(frontend_data):
 
     # 构建 ASS 样式字典
     return {
+        
         'fontSize': str(font_size),
         'color': hex_to_ass_color(font_color, 0),  # 字体颜色（完全不透明）
         'strokeColor': hex_to_ass_color(stroke_color, 0),  # 描边颜色（完全不透明）
@@ -70,7 +71,7 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
         
         # 准备文件路径
         file_id_without_ext = Path(file_id).stem
-        video_path = UPLOAD_DIR / f"{file_id}.mp4"
+        video_path = UPLOAD_DIR / f"{file_id_without_ext}.mp4"
         subtitle_path = SUBTITLE_DIR / f"{file_id_without_ext}.json"
         output_path = SUBTITLED_VIDEO_DIR / f"{file_id_without_ext}_subtitled.mp4"
         ass_path = TEMP_DIR / f"{file_id_without_ext}.ass"
@@ -82,6 +83,7 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
         
         # 使用测试样式
         test_style = {
+            'font_name': 'SimSun',  # 使用 Arial 或其他系统字体
             'fontSize': '68',  # 更大的字体
             'color': '#FF0000',  # 红色
             'strokeColor': '#000000',  # 黑色描边
@@ -97,18 +99,36 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
             # 确保 ASS 文件存在
             if not ass_path.exists():
                 raise HTTPException(500, f"ASS字幕文件未生成: {ass_path}")
-
+            
+            # 使用 FFmpeg 烧录字幕，添加字体文件路径
+            font_path = Path("static/fonts/SimSun.ttf")  # 使用项目内的字体文件
+            
             # 使用 FFmpeg 烧录字幕
-            cmd = [
-                'ffmpeg', '-y',
-                '-i', str(video_path),
-                '-vf', f'ass={str(ass_path)}',  # 移除单引号
-                '-c:v', 'libx264',
-                '-preset', 'medium',
-                '-crf', '23',
-                '-c:a', 'copy',
-                str(output_path)
-            ]
+            # 确保字体文件存在
+            if not font_path.exists():
+                print(f"警告：找不到字体文件 {font_path}，将使用系统默认字体")
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(video_path),
+                    '-vf', f'ass={str(ass_path)}',
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-c:a', 'copy',
+                    str(output_path)
+                ]
+            else:
+                # 使用指定的字体文件
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(video_path),
+                    '-vf', f'ass={str(ass_path)}:fontsdir={font_path.parent}',  # 指定字体目录
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-c:a', 'copy',
+                    str(output_path)
+                ]
             
             print(f"执行命令: {' '.join(cmd)}")
             
@@ -173,6 +193,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 """
         try:
             # 直接使用转换后的样式参数
+            font_name = "SimSun, Microsoft YaHei, WenQuanYi Micro Hei"  # 使用多个备选字体
             font_size = style['fontSize']
             font_color = style['color']
             stroke_color = style['strokeColor']
@@ -185,7 +206,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 
             # 添加样式定义
             style_line = (
-                f"Style: Default,Arial,{font_size},"  # 名称、字体、大小
+                f"Style: Default,{font_name},{font_size},"  # 名称、字体、大小
                 f"{font_color},"  # 主要颜色
                 f"{font_color},"  # 次要颜色
                 f"{stroke_color},"  # 边框颜色

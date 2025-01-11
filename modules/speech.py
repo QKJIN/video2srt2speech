@@ -55,11 +55,11 @@ def trim_silence_end(audio_data, sample_rate, threshold=0.01, min_silence_durati
     end_sample = min(len(audio_data), (end_frame + 1) * frame_length)
     return audio_data[:end_sample]
 
-async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_name: str = "zh-CN-XiaoxiaoNeural", use_local_tts: bool = False, target_language: str = "en-US"):
+async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_name: str = "zh-CN-XiaoxiaoNeural", use_local_tts: bool = False, target_language: str = "en-US", speed: float = 1.0):
     try:
         if use_local_tts:
             # 使用本地 TTS
-            audio_data = await local_tts.generate_speech(text, target_language, voice_name)
+            audio_data = await local_tts.generate_speech(text, target_language, voice_name, speed)
             
             # 裁剪末尾静音
             trimmed_audio = trim_silence_end(audio_data, 22050)  # 22050是采样率
@@ -102,6 +102,13 @@ async def generate_speech(file_id: str, subtitle_index: int, text: str, voice_na
             temp_wav_file = audio_dir / f"{subtitle_index:04d}_temp.wav"
             audio_file = audio_dir / f"{subtitle_index:04d}.mp3"
             
+            # 设置语速
+            # Azure的语速范围是-100到200，0是正常速度
+            # 将我们的speed参数(0.5-2.0)转换为Azure的范围
+            rate_value = int((speed - 1) * 100)  # 1.0->0, 2.0->100, 0.5->-50
+            speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3)
+            speech_config.speech_synthesis_rate = rate_value
+
             # 配置音频输出
             audio_config = speechsdk.audio.AudioOutputConfig(filename=str(temp_wav_file))
 
@@ -192,7 +199,7 @@ async def recognize_speech(file_id: str, audio_path: Path, language: str = "zh-C
                 if duration < 0.1:  # 如果音频太短
                     return []  # 返回空结果
             except Exception as e:
-                print(f"音频文件验��失败: {str(e)}")
+                print(f"音频文件验失败: {str(e)}")
                 continue
 
             speech_config = speechsdk.SpeechConfig(
@@ -396,7 +403,8 @@ async def generate_speech_single(
     index: int,
     target_language: str,
     use_local_tts: bool = False,
-    voice_name: str = None
+    voice_name: str = None,
+    speed: float = 1.0  # 添加语速参数
 ):
     """为单条字幕生成语音"""
     try:
@@ -444,17 +452,31 @@ async def generate_speech_single(
             text=text_to_convert,
             voice_name=voice_name,
             use_local_tts=use_local_tts,
-            target_language=target_language
+            target_language=target_language,
+            speed=speed
         )
 
         if result.get("success"):
             audio_filename = f"{index:04d}.mp3"
             audio_path = AUDIO_DIR / file_id / target_language / audio_filename
             
-            # 检查音频时长
+            # 下面这段重复了，因为在生成语音的时候已经把语速参数设置进去了，也就是生成的语音是按照语速生成的
+            # 如果需要调整语速
+            # if speed != 1.0:
+            #     audio = AudioSegment.from_file(str(audio_path))
+            #     # 使用 pydub 的 speedup 功能调整语速
+            #     # 注意：speedup 需要安装 ffmpeg
+            #     adjusted_audio = audio._spawn(audio.raw_data, overrides={
+            #         "frame_rate": int(audio.frame_rate * speed)
+            #     })
+            #     adjusted_audio.export(str(audio_path), format="mp3")
+            #     audio_duration = adjusted_audio.duration_seconds
+            # else:
+                # audio = AudioSegment.from_file(str(audio_path))
+                # audio_duration = audio.duration_seconds
             audio = AudioSegment.from_file(str(audio_path))
             audio_duration = audio.duration_seconds
-            
+            print('Audio duration is %s seconds' % audio_duration)
             # 计算时长差异（相对于字幕时长）
             duration_diff = audio_duration - subtitle_duration
             diff_percent = (duration_diff / subtitle_duration) * 100

@@ -34,6 +34,7 @@ class SingleSpeechRequest(BaseModel):
     target_language: str
     use_local_tts: bool = False
     voice_name: Optional[str] = None
+    speed: float = 1.0  # 添加语速参数，默认值为1.0
 
 # 创建必要的目录
 for dir_path in DIRS:
@@ -165,9 +166,10 @@ async def generate_speech_single_endpoint(
     subtitle_index: int,
     text: str,
     voice_name: str = "zh-CN-XiaoxiaoNeural",
-    target_language: str = "en-US"
+    target_language: str = "en-US",
+    speed: float = 1.0
 ):
-    return await speech.generate_speech(file_id, subtitle_index, text, voice_name, target_language)
+    return await speech.generate_speech(file_id, subtitle_index, text, voice_name, target_language, speed)
 
 @app.post("/merge-audio/{file_id}")
 async def merge_audio_endpoint(file_id: str, target_language: str):
@@ -341,12 +343,14 @@ async def generate_single_speech_endpoint(
     file_id: str,
     request: SingleSpeechRequest
 ):
+    print('The speed is {0}'.format(request.speed))
     return await speech.generate_speech_single(
         file_id=file_id,
         index=request.index,
         target_language=request.target_language,
         use_local_tts=request.use_local_tts,
-        voice_name=request.voice_name
+        voice_name=request.voice_name,
+        speed=request.speed
     )
 
 
