@@ -55,8 +55,8 @@ AZURE_TRANSLATOR_REGION=your_translator_region
 
 1. 克隆仓库
 bash
-git clone https://github.com/QKJIN/new-srt2speech.git
-cd new-srt2speech
+git clone https://github.com/QKJIN/video2srt2speech.git
+cd video2srt2speech
 
 2. 安装依赖
 bash
