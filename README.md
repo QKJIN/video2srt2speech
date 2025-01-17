@@ -112,7 +112,7 @@ new-srt2speech/
 ├── audio/ # 生成的音频文件
 ├── subtitles/ # 字幕文件
 ├── merged/ # 合并后的音频
-└── subtitled_videos/ # 带字幕的视频
+├── subtitled_videos/ # 带字幕的视频
 └── modules/ # 各种功能文件
 
 

@@ -7,10 +7,12 @@ subtitled_videos/
 temp/
 models/
 .history/
+static/old/
 main-ok.py
 requirements copy.txt
 rule2.md
 .cursorrules
+
 # Python
 __pycache__/
 *.py[cod]
