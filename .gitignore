@@ -6,7 +6,11 @@ merged/
 subtitled_videos/
 temp/
 models/
-
+.history/
+main-ok.py
+requirements copy.txt
+rule2.md
+.cursorrules
 # Python
 __pycache__/
 *.py[cod]
@@ -45,7 +49,7 @@ ENV/
 
 # 日志文件
 *.log
-.history/
+.history/*
 
 # 系统文件
 .DS_Store
