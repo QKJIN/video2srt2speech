@@ -101,6 +101,8 @@ uvicorn main:app --reload
    - 等待视频处理完成
 
 ## 目录结构
+
+```plaintext
 new-srt2speech/
 ├── main.py # 后端主程序
 ├── static/ # 静态文件目录
