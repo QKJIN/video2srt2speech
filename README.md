@@ -39,10 +39,10 @@
 
 1. Python 3.8 或更高版本
 2. FFmpeg
-3. Azure 服务账号
+3. Azure 服务账号（默认使用EDGE TTS，如果要使用需要在环境变量里设置key）
 4. 必要的Python包（见 requirements.txt）
 
-## 环境变量配置
+## 环境变量配置（这一步可以不用了）
 
 创建 `.env` 文件并配置以下变量：
 AZURE_SPEECH_KEY=your_speech_key
@@ -55,7 +55,7 @@ AZURE_TRANSLATOR_REGION=your_translator_region
 
 1. 克隆仓库
 bash
-git clone https://github.com/yourusername/new-srt2speech.git
+git clone https://github.com/QKJIN/new-srt2speech.git
 cd new-srt2speech
 
 2. 安装依赖
@@ -111,6 +111,8 @@ new-srt2speech/
 ├── subtitles/ # 字幕文件
 ├── merged/ # 合并后的音频
 └── subtitled_videos/ # 带字幕的视频
+└── modules/ # 各种功能文件
+
 
 
 ## 注意事项
@@ -123,7 +125,3 @@ new-srt2speech/
 ## License
 
 MIT License
-
-## 安装
-
-1. 安装依赖：

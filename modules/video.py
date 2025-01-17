@@ -8,7 +8,8 @@ from .config import (
     UPLOAD_DIR,
     SUBTITLE_DIR,
     TEMP_DIR,
-    SUBTITLED_VIDEO_DIR
+    SUBTITLED_VIDEO_DIR,
+    MERGED_DIR
 )
 from .utils import convert_to_srt  # 改为从 utils 导入
 
@@ -24,14 +25,20 @@ def hex_to_ass_color(hex_color, alpha=0):
 
 def convert_subtitle_style(frontend_data):
     """转换前端字幕样式为 ASS 格式"""
-    # 获取前端数据
-    bg_color = frontend_data["bgColor"]  # 背景颜色 (e.g., "#000000")
-    bg_opacity = float(frontend_data["bgOpacity"])  # 背景透明度 (e.g., "0.5")
-    font_color = frontend_data["color"]  # 字体颜色 (e.g., "#ffffff")
-    font_size = int(float(frontend_data["fontSize"]))  # 字体大小
-    stroke_color = frontend_data["strokeColor"]  # 描边颜色
-    stroke_width = float(frontend_data["strokeWidth"])  # 描边宽度
-
+    # # 获取前端数据
+    # bg_color = frontend_data["bgColor"]  # 背景颜色 (e.g., "#000000")
+    # bg_opacity = float(frontend_data["bgOpacity"])  # 背景透明度 (e.g., "0.5")
+    # font_color = frontend_data["color"]  # 字体颜色 (e.g., "#ffffff")
+    # font_size = int(float(frontend_data["fontSize"]))  # 字体大小
+    # stroke_color = frontend_data["strokeColor"]  # 描边颜色
+    # stroke_width = float(frontend_data["strokeWidth"])  # 描边宽度
+    # 获取前端数据，设置更明显的默认值
+    bg_color = frontend_data.get("bgColor", "#000000")  # 默认黑色背景
+    bg_opacity = float(frontend_data.get("bgOpacity", "0.5"))  # 默认半透明
+    font_color = frontend_data.get("color", "#FFFFFF")  # 默认白色字体
+    font_size = int(float(frontend_data.get("fontSize", "48")))  # 默认更大字号
+    stroke_color = frontend_data.get("strokeColor", "#000000")  # 默认黑色描边
+    stroke_width = float(frontend_data.get("strokeWidth", "3"))  # 默认更粗描边
 
 
     # 计算 ASS 格式的 alpha 值（反转透明度）
@@ -47,7 +54,15 @@ def convert_subtitle_style(frontend_data):
 
     # 构建 ASS 样式字典
     return {
-        
+        # 'fontSize': str(font_size),
+        # 'color': "&HFFFFFF",  # 白色
+        # 'strokeColor': "&H000000",  # 黑色
+        # 'strokeWidth': str(stroke_width),
+        # 'bgColor': f"&H{ass_alpha:02X}000000",  # 黑色背景带透明度
+        # 'bgOpacity': str(bg_opacity),
+        # 'marginV': "20",  # 更大的垂直边距
+        # 'marginL': "10",
+        # 'marginR': "10"
         'fontSize': str(font_size),
         'color': hex_to_ass_color(font_color, 0),  # 字体颜色（完全不透明）
         'strokeColor': hex_to_ass_color(stroke_color, 0),  # 描边颜色（完全不透明）
@@ -55,10 +70,13 @@ def convert_subtitle_style(frontend_data):
         'bgColor': hex_to_ass_color(bg_color, ass_alpha),  # 背景颜色（使用计算的透明度）
         'bgOpacity': str(bg_opacity),  # 保存原始透明度值
         # 添加背景框设置
-        'marginV': str(box_margin_v),
-        'marginH': str(box_margin_h),
-        'marginL': str(box_margin_h),
-        'marginR': str(box_margin_h)
+        # 'marginV': str(box_margin_v),
+        # 'marginH': str(box_margin_h),
+        # 'marginL': str(box_margin_h),
+        # 'marginR': str(box_margin_h)
+        'marginV': "20",  # 垂直边距
+        'marginL': "10",  # 左边距
+        'marginR': "10"   # 右边距
     }
 
 async def burn_subtitles(file_id: str, language: str, style: dict):
@@ -73,11 +91,15 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
         file_id_without_ext = Path(file_id).stem
         video_path = UPLOAD_DIR / f"{file_id_without_ext}.mp4"
         subtitle_path = SUBTITLE_DIR / f"{file_id_without_ext}.json"
+        translated_subtitle_path = SUBTITLE_DIR / f"{file_id_without_ext}_{language}.json"  # 翻译后的字幕
+        translated_audio_path = MERGED_DIR / f"{file_id_without_ext}" / f"{language}.mp3"  # 翻译后的音频目录
         output_path = SUBTITLED_VIDEO_DIR / f"{file_id_without_ext}_subtitled.mp4"
         ass_path = TEMP_DIR / f"{file_id_without_ext}.ass"
 
         print(f"视频文件路径: {video_path}")
         print(f"字幕文件路径: {subtitle_path}")
+        print(f"翻译字幕路径: {translated_subtitle_path}")
+        print(f"翻译音频目录: {translated_audio_path}")
         print(f"ASS字幕路径: {ass_path}")
         print(f"输出文件路径: {output_path}")
         
@@ -93,13 +115,24 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
         }
 
         # 从 JSON 转换为 ASS 格式
-        await json_to_ass(subtitle_path, ass_path, convert_subtitle_style(style))  # 使用测试样式
+        # await json_to_ass(subtitle_path, ass_path, convert_subtitle_style(style))  # 使用测试样式
+        # 从 JSON 转换为 ASS 格式（使用翻译后的字幕）
+        await json_to_ass(translated_subtitle_path, ass_path, convert_subtitle_style(style))
 
         try:
             # 确保 ASS 文件存在
             if not ass_path.exists():
                 raise HTTPException(500, f"ASS字幕文件未生成: {ass_path}")
             
+            # 检查 ASS 文件内容
+            with open(ass_path, 'r', encoding='utf-8') as f:
+                ass_content = f.read()
+                print(f"ASS文件内容:\n{ass_content}")
+                
+                # 验证 ASS 文件格式
+                if not all(section in ass_content for section in ['[Script Info]', '[V4+ Styles]', '[Events]']):
+                    raise HTTPException(500, "ASS文件格式不完整")
+
             # 使用 FFmpeg 烧录字幕，添加字体文件路径
             font_path = Path("static/fonts/SimSun.ttf")  # 使用项目内的字体文件
             
@@ -110,6 +143,7 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
                 cmd = [
                     'ffmpeg', '-y',
                     '-i', str(video_path),
+                    '-i', str(translated_audio_path),  # 合并后的翻译音频
                     '-vf', f'ass={str(ass_path)}',
                     '-c:v', 'libx264',
                     '-preset', 'medium',
@@ -122,11 +156,20 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
                 cmd = [
                     'ffmpeg', '-y',
                     '-i', str(video_path),
-                    '-vf', f'ass={str(ass_path)}:fontsdir={font_path.parent}',  # 指定字体目录
+                    '-i', str(translated_audio_path),  # 合并后的翻译音频
+                    # '-vf', f'ass={str(ass_path)}:fontsdir={font_path.parent}',  # 指定字体目录
+                    # '-vf', f'subtitles={str(ass_path)}:force_style=\'BorderStyle=1,BackColour=&H0000FF\'',  # 强制红色背景
+                    # '-vf', f'subtitles={str(ass_path)},drawbox=y=ih-h-20:color=red@0.5:t=fill',  # 在字幕下方绘制半透明红色背景
+                    '-vf', f'drawbox=y=ih-h-100:color=red@0.5:t=fill,subtitles={str(ass_path)}:force_style=\'Alignment=2\'',  # 调整盒子位置和高度
+                    # '-vf', f'drawbox=y=ih-th-40:h=th+30:color=red@0.5:t=fill,subtitles={str(ass_path)}',  # 调整盒子位置和高度
                     '-c:v', 'libx264',
                     '-preset', 'medium',
-                    '-crf', '23',
-                    '-c:a', 'copy',
+                    '-c:a', 'aac',  # 使用 AAC 编码音频
+                    '-map', '0:v',  # 使用第一个输入（视频）的视频流
+                    '-map', '1:a',  # 使用第二个输入（音频）的音频流
+                    # '-crf', '23',
+                    # '-c:a', 'copy',
+                    # '-max_muxing_queue_size', '1024',
                     str(output_path)
                 ]
             
@@ -159,7 +202,7 @@ async def burn_subtitles(file_id: str, language: str, style: dict):
             # 清理临时文件
             if ass_path.exists():
                 print(f"清理临时ASS文件: {ass_path}")
-                ass_path.unlink()
+                # ass_path.unlink()
 
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg 执行失败: {e.stderr}")
@@ -193,7 +236,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 """
         try:
             # 直接使用转换后的样式参数
-            font_name = "SimSun, Microsoft YaHei, WenQuanYi Micro Hei"  # 使用多个备选字体
+            font_name = "SimSun"  # 使用多个备选字体
             font_size = style['fontSize']
             font_color = style['color']
             stroke_color = style['strokeColor']
@@ -205,16 +248,37 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
             stroke_width = max(1.0, float(style['strokeWidth']))  # 边框宽度，避免 0 导致问题
 
             # 添加样式定义
+            # style_line = (
+            #     f"Style: Default,{font_name},{font_size},"  # 名称、字体、大小
+            #     f"{font_color},"  # 主要颜色
+            #     f"{font_color},"  # 次要颜色
+            #     # f"{stroke_color},"  # 边框颜色
+            #     f"&H000000,"  # 边框颜色（黑色）
+            #     f"{bg_color},"  # 背景颜色（已包含透明度）
+            #     f"1,0,0,0,"  # 粗体,斜体,下划线,删除线
+            #     f"100,100,0,0,"  # 缩放X,缩放Y,间距,角度
+            #     # f"3,{stroke_width},0,"  # 边框样式(3=显示背景),边框宽度,阴影
+            #     # f"2,{style['marginL']},{style['marginR']},{style['marginV']},1"  # 对齐,左边距,右边距,垂直边距,编码
+            #     f"3,3,0,"  # 边框样式=3(不透明背景),边框宽度=3,阴影=0
+            #     f"2,10,10,20,1"  # 对齐=2(底部中心),边距,编码
+            # )
+
+            # 添加测试样式定义
             style_line = (
-                f"Style: Default,{font_name},{font_size},"  # 名称、字体、大小
-                f"{font_color},"  # 主要颜色
-                f"{font_color},"  # 次要颜色
-                f"{stroke_color},"  # 边框颜色
-                f"{bg_color},"  # 背景颜色（已包含透明度）
-                f"1,0,0,0,"  # 粗体,斜体,下划线,删除线
-                f"100,100,0,0,"  # 缩放X,缩放Y,间距,角度
-                f"3,{stroke_width},0,"  # 边框样式(3=显示背景),边框宽度,阴影
-                f"2,{style['marginL']},{style['marginR']},{style['marginV']},1"  # 对齐,左边距,右边距,垂直边距,编码
+                f"Style: Default,SimSun,{font_size},"  # 字体
+                f"&HFFFFFF,"    # 主要颜色（白色）
+                f"&HFFFFFF,"    # 次要颜色（白色）
+                f"&H000000,"    # 边框颜色（黑色）
+                f"&H000000,"  # 背景颜色（红色，完全不透明）- 当前值
+                # 尝试以下几种值之一：
+                # f"&H7FFF0000,"  # 蓝色背景
+                # f"&H7F00FF00,"  # 绿色背景
+                # f"&H7F0000FF,"  # 红色背景
+                # f"&H7F00FFFF,"  # 黄色背景
+                f"1,0,0,0,"     # 粗体,斜体,下划线,删除线
+                f"100,100,0,0," # 缩放X,缩放Y,间距,角度
+                f"1,2,0,"       # 边框样式,边框宽度,阴影
+                f"2,10,10,20,1" # 对齐,边距,编码
             )
             
             ass_content += style_line + "\n\n"

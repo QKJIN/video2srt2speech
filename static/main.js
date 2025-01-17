@@ -774,7 +774,8 @@ burnSubtitlesBtn.addEventListener('click', async () => {
 
         console.log('发送的字幕样式:', style);  // 调试日志
 
-        const language = document.getElementById('sourceLanguage').value;
+        // const language = document.getElementById('sourceLanguage').value;
+        const language = document.getElementById('targetLanguage').value;
         
         const response = await fetch(`/burn-subtitles/${currentFileId}?language=${language}`, {
             method: 'POST',

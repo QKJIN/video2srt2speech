@@ -110,6 +110,7 @@
         
         #subtitledVideo {
             object-fit: contain;
+            width: 100%;
         }
         
         #subtitledVideo::-webkit-media-controls-timeline {
@@ -138,7 +139,7 @@
         
         .subtitledVideo-wrapper {
             position: relative;
-            width: 50%;  /* 适应视频实际宽度 */
+            width: 30%;  /* 适应视频实际宽度 */
             height: fit-content; /* 适应视频实际高度 */
             margin: auto;        /* 居中 */
             max-width: 100%;         /* 最大宽度为50% */
@@ -585,7 +586,7 @@
                     <h6 class="mb-0">带字幕的视频预览</h6>
                 </div>
                 <div class="subtitledVideo-wrapper">
-                    <video id="subtitledVideo" controls class="w-100">
+                    <video id="subtitledVideo">
                         您的浏览器不支持 HTML5 视频播放。
                     </video>
                 </div>
