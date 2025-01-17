@@ -114,7 +114,7 @@ new-srt2speech/
 ├── merged/ # 合并后的音频
 ├── subtitled_videos/ # 带字幕的视频
 └── modules/ # 各种功能文件
-```plaintext
+```
 
 
 ## 注意事项
