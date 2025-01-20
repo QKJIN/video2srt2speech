@@ -1,0 +1,356 @@
+import os
+from fastapi import HTTPException
+import subprocess
+import asyncio
+from pathlib import Path
+from moviepy.editor import VideoFileClip
+from .config import (
+    UPLOAD_DIR,
+    SUBTITLE_DIR,
+    TEMP_DIR,
+    SUBTITLED_VIDEO_DIR,
+    MERGED_DIR
+)
+from .utils import convert_to_srt  # 改为从 utils 导入
+import ass
+
+# 颜色转换函数
+def hex_to_ass_color(hex_color, alpha=0):
+        # 去掉 "#" 并提取 RGB
+        hex_color = hex_color.lstrip("#")
+        r, g, b = int(hex_color[:2], 16), int(hex_color[2:4], 16), int(hex_color[4:], 16)
+        # ASS 使用 AABBGGRR 格式，其中 AA 是 alpha 通道
+        # 在 ASS 中，0 表示完全不透明，255 表示完全透明
+        return f"&H{alpha:02X}{b:02X}{g:02X}{r:02X}"
+
+def convert_subtitle_style(frontend_data):
+    """转换前端字幕样式为 ASS 格式"""
+    # # 获取前端数据
+    # bg_color = frontend_data["bgColor"]  # 背景颜色 (e.g., "#000000")
+    # bg_opacity = float(frontend_data["bgOpacity"])  # 背景透明度 (e.g., "0.5")
+    # font_color = frontend_data["color"]  # 字体颜色 (e.g., "#ffffff")
+    # font_size = int(float(frontend_data["fontSize"]))  # 字体大小
+    # stroke_color = frontend_data["strokeColor"]  # 描边颜色
+    # stroke_width = float(frontend_data["strokeWidth"])  # 描边宽度
+    # 获取前端数据，设置更明显的默认值
+    bg_color = frontend_data.get("bgColor", "#000000")  # 默认黑色背景
+    bg_opacity = float(frontend_data.get("bgOpacity", "0.5"))  # 默认半透明
+    font_color = frontend_data.get("color", "#FFFFFF")  # 默认白色字体
+    font_size = int(float(frontend_data.get("fontSize", "48")))  # 默认更大字号
+    stroke_color = frontend_data.get("strokeColor", "#000000")  # 默认黑色描边
+    stroke_width = float(frontend_data.get("strokeWidth", "3"))  # 默认更粗描边
+
+
+    # 计算 ASS 格式的 alpha 值（反转透明FF
+    # 前端的 opacity: 0.0 (完全透明) -> ASS alpha: 255 (完全透明)
+    # 前端的 opacity: 1.0 (完全不透明) -> ASS alpha: 0 (完全不透明)
+    ass_alpha = int((1 - bg_opacity) * 255)
+
+    # 获取背景框设置
+    box_margin_v = int(frontend_data.get("boxMarginV", 10))
+    box_margin_h = int(frontend_data.get("boxMarginH", 10))
+    box_padding_v = int(frontend_data.get("boxPaddingV", 5))
+    box_padding_h = int(frontend_data.get("boxPaddingH", 10))
+
+    # 构建 ASS 样式字典
+    return {
+        'fontSize': str(font_size),
+        'color': hex_to_ass_color(font_color, 0),  # 字体颜色（完全不透明）
+        'strokeColor': hex_to_ass_color(stroke_color, 0),  # 描边颜色（完全不透明）
+        'strokeWidth': str(stroke_width),
+        'bgColor': hex_to_ass_color(bg_color, ass_alpha),  # 背景颜色（使用计算的透明度）
+        'bgOpacity': str(bg_opacity),  # 保存原始透明度值
+        # 添加背景框设置
+        # 'marginV': str(box_margin_v),
+        # 'marginH': str(box_margin_h),
+        # 'marginL': str(box_margin_h),
+        # 'marginR': str(box_margin_h)
+        'marginV': "20",  # 垂直边距
+        'marginL': "10",  # 左边距
+        'marginR': "10"   # 右边距
+    }
+
+async def burn_subtitles(file_id: str, language: str, style: dict):
+    """将字幕烧录到视频中"""
+    try:
+        
+        # 确保目录存在
+        SUBTITLED_VIDEO_DIR.mkdir(exist_ok=True)
+        TEMP_DIR.mkdir(exist_ok=True)
+        
+        # 准备文件路径
+        file_id_without_ext = Path(file_id).stem
+        video_path = UPLOAD_DIR / f"{file_id_without_ext}.mp4"
+        subtitle_path = SUBTITLE_DIR / f"{file_id_without_ext}.json"
+        translated_subtitle_path = SUBTITLE_DIR / f"{file_id_without_ext}_{language}.json"  # 翻译后的字幕
+        translated_audio_path = MERGED_DIR / f"{file_id_without_ext}" / f"{language}.mp3"  # 翻译后的音频目录
+        output_path = SUBTITLED_VIDEO_DIR / f"{file_id_without_ext}_subtitled.mp4"
+        ass_path = TEMP_DIR / f"{file_id_without_ext}.ass"
+
+        print(f"视频文件路径: {video_path}")
+        print(f"字幕文件路径: {subtitle_path}")
+        print(f"翻译字幕路径: {translated_subtitle_path}")
+        print(f"翻译音频目录: {translated_audio_path}")
+        print(f"ASS字幕路径: {ass_path}")
+        print(f"输出文件路径: {output_path}")
+        
+        # 使用测试样式
+        test_style = {
+            'font_name': 'SimSun',  # 使用 Arial 或其他系统字体
+            'fontSize': '68',  # 更大的字体
+            'color': '#FF0000',  # 红色
+            'strokeColor': '#000000',  # 黑色描边
+            'strokeWidth': '3',  # 更粗的描边
+            'bgColor': '#FFFF00',  # 黄色背景
+            'bgOpacity': '0.8'  # 较高的不透明度
+        }
+
+        # 计算字幕框的高度和位置参数
+        font_size = int(style['fontSize'])
+        max_lines = 3  # 预计最大行数
+        line_spacing = 1  # 行间距倍数
+        padding_vertical = 20  # 上下内边距
+        
+        # 计算背景框高度
+        subtitle_box_height = int(font_size * max_lines * line_spacing + padding_vertical * 2)
+        bottom_margin = 10  # 距离底部的距离
+        
+        # 计算字幕在背景框中的垂直位置
+        subtitle_margin_v = int(subtitle_box_height / 2 - font_size)  # 字幕到顶部的距离
+        
+        # 将计算出的边距传递给 json_to_ass 函数
+        await json_to_ass(translated_subtitle_path, ass_path, {
+            **convert_subtitle_style(style),
+            'marginV': str(subtitle_margin_v)  # 添加计算出的垂直边距
+        })
+
+        # 从 JSON 转换为 ASS 格式
+        # await json_to_ass(subtitle_path, ass_path, convert_subtitle_style(style))  # 使用测试样式
+        # 从 JSON 转换为 ASS 格式（使用翻译后的字幕）
+        # await json_to_ass(translated_subtitle_path, ass_path, convert_subtitle_style(style))
+
+        try:
+            # 确保 ASS 文件存在
+            if not ass_path.exists():
+                raise HTTPException(500, f"ASS字幕文件未生成: {ass_path}")
+            
+            # 检查 ASS 文件内容
+            with open(ass_path, 'r', encoding='utf-8') as f:
+                ass_content = f.read()
+                print(f"ASS文件内容:\n{ass_content}")
+                
+                # 验证 ASS 文件格式
+                if not all(section in ass_content for section in ['[Script Info]', '[V4+ Styles]', '[Events]']):
+                    raise HTTPException(500, "ASS文件格式不完整")
+
+            # 使用 FFmpeg 烧录字幕，添加字体文件路径
+            font_path = Path("static/fonts/SimSun.ttf")  # 使用项目内的字体文件
+            
+            # 使用 FFmpeg 烧录字幕
+            # 确保字体文件存在
+            if not font_path.exists():
+                print(f"警告：找不到字体文件 {font_path}，将使用系统默认字体")
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(video_path),
+                    '-i', str(translated_audio_path),  # 合并后的翻译音频
+                    '-vf', f'ass={str(ass_path)}',
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-c:a', 'copy',
+                    str(output_path)
+                ]
+            else:
+                # 使用指定的字体文件
+                # FFmpeg 命令
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(video_path),
+                    '-i', str(translated_audio_path),
+                    '-vf', f'drawbox=x=0:y=ih-{subtitle_box_height}-{bottom_margin}:w=iw:h={subtitle_box_height}:color=red@0.5:t=fill,'
+                          f'ass={str(ass_path)}:fontsdir={font_path.parent}',
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-c:a', 'aac',
+                    '-map', '0:v',
+                    '-map', '1:a',
+                    str(output_path)
+                ]
+
+                # cmd = [
+                #     'ffmpeg', '-y',
+                #     '-i', str(video_path),
+                #     '-i', str(translated_audio_path),  # 合并后的翻译音频
+                #     '-vf', f'ass={str(ass_path)}:fontsdir={font_path.parent}',  # 指定字体目录
+                #     '-c:v', 'libx264',
+                #     '-preset', 'medium',
+                #     '-c:a', 'aac',  # 使用 AAC 编码音频
+                #     '-map', '0:v',  # 使用第一个输入（视频）的视频流
+                #     '-map', '1:a',  # 使用第二个输入（音频）的音频流
+                #     str(output_path)
+                # ]
+            
+            print(f"执行命令: {' '.join(cmd)}")
+            
+            # 执行命令并捕获输出
+            process = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True
+            )
+            
+            print(f"FFmpeg 标准输出: {process.stdout}")
+            print(f"FFmpeg 错误输出: {process.stderr}")
+
+            # 检查输出文件
+            if not output_path.exists() or output_path.stat().st_size == 0:
+                raise HTTPException(500, "输出文件无效")
+
+            print(f"字幕烧录完成，输出文件: {output_path}")
+            return {
+                "status": "success",
+                "message": "字幕烧录完成",
+                "output_file": str(output_path.name)
+            }
+
+        finally:
+            # 清理临时文件
+            if ass_path.exists():
+                print(f"清理临时ASS文件: {ass_path}")
+                # ass_path.unlink()
+
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg 执行失败: {e.stderr}")
+        raise HTTPException(500, f"FFmpeg 执行失败: {e.stderr}")
+    except Exception as e:
+        print(f"烧录字幕失败: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(500, f"烧录字幕失败: {str(e)}")
+
+async def json_to_ass(json_path: Path, ass_path: Path, style: dict):
+    """将 JSON 格式的字幕转换为 ASS 格式"""
+    try:
+        import json
+        
+        print("收到的样式参数:", style)
+        
+        # 读取 JSON 字幕
+        with open(json_path, 'r', encoding='utf-8') as f:
+            subtitles = json.load(f)
+
+        # 生成 ASS 文件内容
+        ass_content = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+"""
+        try:
+            # 直接使用转换后的样式参数
+            font_name = "SimSun"  # 使用多个备选字体
+            font_size = style['fontSize']
+            font_color = style['color']
+            stroke_color = style['strokeColor']
+            bg_opacity = float(style['bgOpacity'])
+            ass_alpha = int((1 - bg_opacity) * 255)  # 转换透明度
+            # bg_color = hex_to_ass_color(style['bgColor'], ass_alpha)  # 确保正确透明度
+            bg_color = style['bgColor']  # 这里的 bg_color 已经包含了透明度信息
+            # stroke_width = style['strokeWidth']
+            stroke_width = max(1.0, float(style['strokeWidth']))  # 边框宽度，避免 0 导致问题
+
+            # 获取垂直边距
+            margin_v = style.get('marginV', '20')  # 使用传入的垂直边距
+
+            # 添加样式定义
+            style_line = (
+                f"Style: Default,{font_name},{font_size},"  # 名称、字体、大小
+                # f"{font_color},"  # 主要颜色
+                # f"{font_color},"  # 次要颜色
+                f"&HFFFFFF,"  # 主要颜色（白色）
+                f"&HFFFFFF,"  # 次要颜色（白色）
+                # f"{stroke_color},"  # 边框颜色
+                f"&H000000,"  # 边框颜色（黑色）
+                # f"{bg_color},"  # 背景颜色（已包含透明度）
+                # f"&H7FFF0000,"  # 背景颜色（红色，半透明）
+                f"&H00000000,"  # 背景颜色（红色）- AA=00(不透明) BB=00(蓝) GG=00(绿) RR=FF(红)
+                # f"1,0,0,0,"  # 粗体,斜体,下划线,删除线
+                f"-1,0,0,0,"  # 加粗(-1=是),斜体,下划线,删除线
+                f"100,100,0,0,"  # 缩放X,缩放Y,间距,角度
+                # f"3,{stroke_width},0,"  # 边框样式(3=显示背景),边框宽度,阴影
+                # f"2,{style['marginL']},{style['marginR']},{style['marginV']},1"  # 对齐,左边距,右边距,垂直边距,编码
+                # f"3,1,0,"  # BorderStyle=3(显示背景),Outline=1,Shadow=0
+                f"1,1,0,"  # BorderStyle=1,Outline=1,Shadow=0
+                # f"2,10,10,20,1"  # 对齐=2(底部中心),边距,编码
+                f"2,10,10,{margin_v},1"  # 对齐=2(底部中心),边距
+            )
+
+            # 添加测试样式定义
+            # style_line = (
+            #     f"Style: Default,SimSun,{font_size},"  # 字体
+            #     f"&HFFFFFF,"    # 主要颜色（白色）
+            #     f"&HFFFFFF,"    # 次要颜色（白色）
+            #     f"&H000000,"    # 边框颜色（黑色）
+            #     f"&H000000,"  # 背景颜色（红色，完全不透明）- 当前值
+            #     # 尝试以下几种值之一：
+            #     # f"&H7FFF0000,"  # 蓝色背景
+            #     # f"&H7F00FF00,"  # 绿色背景
+            #     # f"&H7F0000FF,"  # 红色背景
+            #     # f"&H7F00FFFF,"  # 黄色背景
+            #     f"1,0,0,0,"     # 粗体,斜体,下划线,删除线
+            #     f"100,100,0,0," # 缩放X,缩放Y,间距,角度
+            #     f"1,2,0,"       # 边框样式,边框宽度,阴影
+            #     f"2,10,10,20,1" # 对齐,边距,编码
+            # )
+            
+            ass_content += style_line + "\n\n"
+            print(f"ASS样式行: {style_line}")
+
+        except ValueError as e:
+            print(f"样式参数处理错误: {e}")
+            print(f"原始样式参数: {style}")
+            raise HTTPException(500, f"样式参数处理错误: {str(e)}")
+
+        # 添加事件格式定义
+        ass_content += "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+
+        # 添加字幕事件
+        for subtitle in subtitles:
+            start_time = format_time(subtitle['start'])
+            end_time = format_time(subtitle['start'] + subtitle['duration'])
+            text = subtitle['text'].replace('\n', '\\N')
+            
+            # 添加字幕事件
+            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n"
+
+        # 写入 ASS 文件
+        with open(ass_path, 'w', encoding='utf-8') as f:
+            f.write(ass_content)
+
+        print(f"生成的ASS文件内容:\n{ass_content}")
+
+    except Exception as e:
+        print(f"转换字幕格式失败: {str(e)}")
+        raise HTTPException(500, f"转换字幕格式失败: {str(e)}")
+
+def format_time(seconds: float) -> str:
+    """将秒数转换为 ASS 格式的时间字符串 (H:MM:SS.cc)"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    centisecs = int((seconds * 100) % 100)
+    return f"{hours}:{minutes:02d}:{secs:02d}.{centisecs:02d}"
+
+def get_video_duration(video_path: Path) -> float:
+    """获取视频时长"""
+    try:
+        with VideoFileClip(str(video_path)) as video:
+            return video.duration
+    except Exception as e:
+        raise HTTPException(500, f"获取视频时长失败: {str(e)}") 
