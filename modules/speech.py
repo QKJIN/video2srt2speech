@@ -293,6 +293,7 @@ async def generate_speech_for_file(
     file_id: str, 
     target_language: str = None,
     voice_name: str = None,
+    speed: float = 1.0,
     use_local_tts: bool = False
 ):
     """为整个文件生成语音"""
@@ -334,7 +335,8 @@ async def generate_speech_for_file(
                 text=subtitle['text'],
                 voice_name=voice_name,
                 use_local_tts=use_local_tts,
-                target_language=target_language
+                target_language=target_language,
+                speed=speed
             )
 
             if result.get("success"):

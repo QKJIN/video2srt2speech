@@ -39,6 +39,7 @@ wheels/
 # 虚拟环境
 venv/
 ENV/
+venv_py311
 
 # IDE
 .idea/

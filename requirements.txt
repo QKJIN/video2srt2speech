@@ -6,7 +6,8 @@ python-dotenv==1.0.0
 pydantic==1.10.7
 
 # 音视频处理
-numpy==1.22.0  # 固定版本以满足所有依赖
+numpy>=1.24.3
+#numpy==1.22.0  # 固定版本以满足所有依赖
 moviepy==1.0.3
 pydub==0.25.1
 soundfile>=0.12.1

@@ -155,6 +155,7 @@ async def generate_speech_endpoint(
             file_id,
             target_language=params.get('target_language'),
             voice_name=params.get('voice_name'),
+            speed = params.get('speed'),
             use_local_tts=params.get('use_local_tts', False)
         )
     except Exception as e:

@@ -24,6 +24,19 @@ let isClosing = false;  // 主动关闭标志
 const MAX_RECONNECT_ATTEMPTS = 3;  // 最大重连次数
 const RECONNECT_DELAY = 1000;  // 基础重连延迟（毫秒）
 
+let globalSpeed = 1.0;
+
+// 添加更新所有语速选择器的函数
+function updateAllSpeedControls(speed) {
+    globalSpeed = parseFloat(speed);
+    // 更新所有字幕项的语速选择器
+    document.querySelectorAll('.speed-control').forEach(select => {
+        select.value = globalSpeed;
+        // 触发 change 事件
+        select.dispatchEvent(new Event('change'));
+    });
+}
+
 // 显示加载动画
 function showLoading() {
     document.querySelector('.loading-overlay').style.display = 'flex';
@@ -309,6 +322,8 @@ generateSubtitlesBtn.addEventListener('click', async () => {
 
 // 显示字幕
 async function displaySubtitles(fileId, subtitleData, translationData = null) {
+    // 获取全局语速设置
+    //const globalSpeed = 1.0; // 默认语速
     try {
         const subtitleEditor = document.getElementById('subtitleEditor');
         if (!subtitleEditor) return;
@@ -335,7 +350,7 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
             
             // 修改 subtitle-controls 部分，添加语速选择
             const speedOptions = [1.0, 1.2, 1.5, 1.75].map(speed => 
-                `<option value="${speed}">${speed}x</option>`
+                `<option value="${speed}"${speed === globalSpeed ? ' selected' : ''}>${speed}x</option>`
             ).join('');
 
             html += `
@@ -350,10 +365,11 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                             <button class="btn btn-sm btn-outline-info translate-single-btn me-1" onclick="translateSingle(${i})">翻译</button>
                             <div class="speech-controls">
                                 <button class="btn btn-sm btn-outline-success generate-single-speech-btn" onclick="generateSingleSpeech(${i})">语音</button>
-                                <select class="speed-control" onchange="adjustSpeed(${i}, this.value)">
+                                <select class="speed-control" data-index="${i}">
                                     ${speedOptions}
                                 </select>
-                            </div>                       </div>
+                            </div>                       
+                        </div>
                     </div>
                     <div class="subtitle-text">
                         <div class="original-text" contenteditable="false">${originalText}</div>
@@ -551,6 +567,14 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
     }
 }
 
+// 为所有语速选择器添加事件监听器
+document.querySelectorAll('.speed-control').forEach(select => {
+    select.addEventListener('change', function() {
+        const index = parseInt(this.dataset.index);
+        adjustSpeed(index, this.value);
+    });
+});
+
 // 跳转到指定时间
 function jumpToTime(time) {
     const videoPlayer = document.getElementById('videoPlayer');
@@ -645,7 +669,8 @@ generateSpeechBtn.addEventListener('click', async () => {
         // 准备请求参数
         const params = {
             target_language: targetLanguage.value,
-            use_local_tts: useLocalTTS.checked
+            use_local_tts: useLocalTTS.checked,
+            speed: globalSpeed  // 添加这一行，使用全局语速
         };
         
 
@@ -1556,7 +1581,7 @@ function timeToSeconds(timeString) {
     }
 }
 
-function createSpeedControl(index, currentSpeed = 1.0) {
+function createSpeedControl(index, currentSpeed = globalSpeed) {
     const speeds = [1.0, 1.2, 1.5, 1.75];
     const select = document.createElement('select');
     select.className = 'speed-control';
@@ -1758,6 +1783,63 @@ async function adjustSpeed(index, speed) {
         hideLoading();
     }
 }
+
+
+// 添加 DOM 加载完成后的初始化函数
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化全局语速选择器
+    const speedSelect = document.getElementById('speedSelect');
+    if (speedSelect) {
+        speedSelect.addEventListener('change', function() {
+            updateAllSpeedControls(this.value);
+        });
+    }
+    
+    // 初始化分隔线拖动功能
+    const divider = document.getElementById('divider');
+    const sidebar = document.querySelector('.sidebar');
+    const mainContent = document.querySelector('.main-content');
+    let isDragging = false;
+
+    if (divider) {
+        // 鼠标按下事件
+        divider.addEventListener('mousedown', function(e) {
+            isDragging = true;
+            divider.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+        });
+
+        // 鼠标移动事件
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            const containerWidth = document.body.clientWidth;
+            let newPosition = (e.clientX / containerWidth) * 100;
+            newPosition = Math.max(20, Math.min(80, newPosition));
+            
+            sidebar.style.width = `${newPosition}%`;
+            divider.style.left = `${newPosition}%`;
+            mainContent.style.width = `${100 - newPosition}%`;
+        });
+
+        // 鼠标松开事件
+        document.addEventListener('mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                divider.classList.remove('dragging');
+                document.body.style.cursor = '';
+            }
+        });
+
+        // 鼠标离开窗口事件
+        document.addEventListener('mouseleave', function() {
+            if (isDragging) {
+                isDragging = false;
+                divider.classList.remove('dragging');
+                document.body.style.cursor = '';
+            }
+        });
+    }
+});
 
 // 在main.js末尾调用这个初始化函数
 initializeSubtitleLoader();

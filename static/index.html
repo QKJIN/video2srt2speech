@@ -526,6 +526,15 @@
                 </select>
             </div>
             <div class="language-control-item">
+                <label for="speedSelect" class="form-label">选择语速</label>
+                <select class="form-select" id="speedSelect">
+                    <option value="1.0">1.0x</option>
+                    <option value="1.2">1.2x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="1.75">1.75x</option>
+                </select>
+            </div>
+            <div class="language-control-item">
                 <label for="subtitleModel" class="form-label">字幕模型</label>
                 <select class="form-select" id="subtitleModel">
                     <optgroup label="Whisper (本地)">
@@ -599,54 +608,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/main.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const divider = document.getElementById('divider');
-            const sidebar = document.querySelector('.sidebar');
-            const mainContent = document.querySelector('.main-content');
-            let isDragging = false;
-
-            // 鼠标按下事件
-            divider.addEventListener('mousedown', function(e) {
-                isDragging = true;
-                divider.classList.add('dragging');
-                
-                // 防止文本选择
-                document.body.style.cursor = 'col-resize';
-            });
-
-            // 鼠标移动事件
-            document.addEventListener('mousemove', function(e) {
-                if (!isDragging) return;
-
-                // 计算分割线新位置（限制在20%到80%之间）
-                const containerWidth = document.body.clientWidth;
-                let newPosition = (e.clientX / containerWidth) * 100;
-                newPosition = Math.max(20, Math.min(80, newPosition));
-
-                // 更新元素宽度
-                sidebar.style.width = `${newPosition}%`;
-                divider.style.left = `${newPosition}%`;
-                mainContent.style.width = `${100 - newPosition}%`;
-            });
-
-            // 鼠标松开事件
-            document.addEventListener('mouseup', function() {
-                if (isDragging) {
-                    isDragging = false;
-                    divider.classList.remove('dragging');
-                    document.body.style.cursor = '';
-                }
-            });
-
-            // 鼠标离开窗口事件
-            document.addEventListener('mouseleave', function() {
-                if (isDragging) {
-                    isDragging = false;
-                    divider.classList.remove('dragging');
-                    document.body.style.cursor = '';
-                }
-            });
-        });
 
         // 修改保存字幕按钮的处理函数
         async function downloadSubtitles(e) {
