@@ -1839,9 +1839,37 @@ async function adjustSpeed(index, speed) {
 }
 
 
-// 添加 DOM 加载完成后的初始化函数
-document.addEventListener('DOMContentLoaded', function() {
-    // 初始化全局语速选择器
+// 在DOM加载完成后初始化语音选择器
+function initializeVoiceSelector() {
+    const voiceSelect = document.getElementById('voiceSelect');
+    if (voiceSelect) {
+        // 添加所有en-US语音选项
+        const enVoices = [
+            {"name": "en-US-JennyNeural", "description": "Jenny - Casual and friendly"},
+            {"name": "en-US-GuyNeural", "description": "Guy - Professional"},
+            {"name": "en-US-AriaNeural", "description": "Aria - Professional"},
+            {"name": "en-US-DavisNeural", "description": "Davis - Casual"},
+            {"name": "en-US-AmberNeural", "description": "Amber - Warm and engaging"},
+            {"name": "en-US-JasonNeural", "description": "Jason - Natural and clear"},
+            {"name": "en-US-SaraNeural", "description": "Sara - Clear and precise"},
+            {"name": "en-US-TonyNeural", "description": "Tony - Friendly and natural"}
+        ];
+        
+        enVoices.forEach(voice => {
+            const option = document.createElement('option');
+            option.value = voice.name;
+            option.textContent = voice.description;
+            voiceSelect.appendChild(option);
+        });
+        
+        // 设置默认选择
+        voiceSelect.value = 'en-US-JennyNeural';
+    }
+}
+
+// 在页面加载完成后调用初始化函数
+document.addEventListener('DOMContentLoaded', () => {
+    initializeVoiceSelector();
     const speedSelect = document.getElementById('speedSelect');
     if (speedSelect) {
         speedSelect.addEventListener('change', function() {
