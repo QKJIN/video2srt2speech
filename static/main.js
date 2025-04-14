@@ -682,6 +682,20 @@ translateBtn.addEventListener('click', async () => {
 });
 
 // 生成语音
+// 添加音频控制事件监听器
+document.getElementById('includeOriginalAudio').addEventListener('change', function() {
+    // 在这里可以获取复选框的状态
+    const includeOriginal = this.checked;
+    console.log('包含原始音频:', includeOriginal);
+});
+
+document.getElementById('audioVolume').addEventListener('input', function() {
+    const volumeValue = this.value;
+    document.getElementById('volumeValue').textContent = parseFloat(volumeValue).toFixed(2);
+    console.log('音量值:', volumeValue);
+});
+
+// 修改生成语音函数中的参数
 generateSpeechBtn.addEventListener('click', async () => {
     if (!currentFileId || !subtitles) {
         showError('请先生成字幕');
@@ -709,9 +723,10 @@ generateSpeechBtn.addEventListener('click', async () => {
         const params = {
             target_language: targetLanguage.value,
             use_local_tts: useLocalTTS.checked,
-            speed: globalSpeed  // 添加这一行，使用全局语速
+            speed: globalSpeed,
+            include_original: document.getElementById('includeOriginalAudio').checked,
+            volume: parseFloat(document.getElementById('audioVolume').value)
         };
-        
 
         if (!voiceSelect.value) {
             throw new Error('请选择语音');
@@ -764,7 +779,7 @@ mergeAudioBtn.addEventListener('click', async () => {
 
     try {
         showLoading();
-        const response = await fetch(`/merge-audio/${currentFileId}?target_language=${targetLanguage.value}`, {
+        const response = await fetch(`/merge-audio/${currentFileId}?target_language=${targetLanguage.value}&include_original=${document.getElementById('includeOriginalAudio')?.checked || false}&volume=${document.getElementById('audioVolume')?.value || 1.0}`, {
             method: 'POST'
         });
 

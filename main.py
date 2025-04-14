@@ -178,8 +178,8 @@ async def generate_speech_single_endpoint(
     return await speech.generate_speech(file_id, subtitle_index, text, voice_name, target_language, speed)
 
 @app.post("/merge-audio/{file_id}")
-async def merge_audio_endpoint(file_id: str, target_language: str):
-    return await audio.merge_audio(file_id, target_language)
+async def merge_audio_endpoint(file_id: str, target_language: str, include_original: bool = True, volume: float = 1.0):
+    return await audio.merge_audio(file_id, target_language, include_original, volume)
 
 @app.post("/burn-subtitles/{file_id}")
 async def burn_subtitles_endpoint(

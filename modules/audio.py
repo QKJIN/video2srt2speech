@@ -179,12 +179,17 @@ def process_audio_file(
         logger.error(f"❌ Failed to process audio file {audio_file}: {str(e)}")
         return None
     
-async def merge_audio(file_id: str, target_language: str):
+async def merge_audio(file_id: str, target_language: str, include_original: bool = True, volume: float = 1.0):
     try:
-        # 验证目录和文
+        # 验证目录和文件
         audio_dir = AUDIO_DIR / file_id / target_language
         if not audio_dir.exists():
             raise HTTPException(404, "音频文件目录未找到")
+            
+        # 获取原始音频文件路径
+        original_audio = AUDIO_DIR / f"{Path(file_id).stem}.mp3"
+        if not original_audio.exists():
+            logger.warning("原始音频文件不存在，将只合并生成的语音")
 
         # 加载字幕文件
         file_id_without_ext = Path(file_id).stem
@@ -244,6 +249,11 @@ async def merge_audio(file_id: str, target_language: str):
             # 添加所有输入文件
             for audio_file, _, _ in input_files:
                 cmd.extend(['-i', str(audio_file)])
+                
+            # 添加原始音频文件（如果存在）
+            has_original_audio = original_audio.exists()
+            if has_original_audio:
+                cmd.extend(['-i', str(original_audio)])
             
             # 构建过滤器命令
             filter_parts = []
@@ -282,9 +292,23 @@ async def merge_audio(file_id: str, target_language: str):
 
             # 合并所有音频轨道
             filter_complex = ''.join(filter_parts)
-            merge_cmd = ''.join(f'[delayed{i}]' for i in range(len(input_files)))
-            filter_complex += f'{merge_cmd}amix=inputs={len(input_files)}:dropout_transition=0,'
-            filter_complex += 'loudnorm=I=-16:TP=-1.5:LRA=11[aout]'  # 添加 loudnorm 滤镜
+            
+            # 处理原始音频（如果存在且用户选择包含）
+            if has_original_audio and include_original:
+                # 先混合所有语音轨道
+                merge_cmd = ''.join(f'[delayed{i}]' for i in range(len(input_files)))
+                filter_complex += f'{merge_cmd}amix=inputs={len(input_files)}:dropout_transition=0[speech];'  # 混合语音轨道
+                # 调整原始音频音量
+                filter_complex += f'[{len(input_files)}:a]volume={volume}[bg];'  # 使用传入的volume参数调整背景音量
+                # 混合语音和背景音频
+                filter_complex += '[speech]volume=2[speech_adjusted];'  # 调整语音音量
+                filter_complex += '[speech_adjusted][bg]amix=inputs=2:duration=first[premix];'
+                filter_complex += '[premix]loudnorm=I=-16:TP=-1.5:LRA=11[aout]'  # 添加 loudnorm 滤镜
+            else:
+                # 如果没有原始音频，直接合并语音轨道
+                merge_cmd = ''.join(f'[delayed{i}]' for i in range(len(input_files)))
+                filter_complex += f'{merge_cmd}amix=inputs={len(input_files)}:dropout_transition=0,'
+                filter_complex += 'loudnorm=I=-16:TP=-1.5:LRA=11[aout]'  # 添加 loudnorm 滤镜
             
             # 完成命令构建
             cmd.extend([
@@ -328,4 +352,4 @@ async def merge_audio(file_id: str, target_language: str):
         logger.error(f"音频合并失败: {str(e)}")
         if final_output.exists():
             final_output.unlink()
-        raise HTTPException(500, str(e)) 
+        raise HTTPException(500, str(e))
