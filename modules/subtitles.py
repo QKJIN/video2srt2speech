@@ -21,6 +21,69 @@ import azure.cognitiveservices.speech as speechsdk
 import whisper
 import torch
 
+async def delete_subtitle(file_id: str, index: int):
+    """删除指定索引的字幕
+    Args:
+        file_id (str): 文件ID
+        index (int): 要删除的字幕索引
+    Returns:
+        dict: 包含处理结果的字典
+    """
+    try:
+        # 确保索引是整数
+        if not isinstance(index, int):
+            raise HTTPException(400, "字幕索引必须是整数")
+            
+        # 准备文件路径
+        file_id_without_ext = file_id.rsplit('.', 1)[0] if '.' in file_id else file_id
+        subtitle_file = SUBTITLE_DIR / f"{file_id_without_ext}.json"
+        
+        # 检查字幕文件是否存在
+        if not subtitle_file.exists():
+            raise HTTPException(404, "字幕文件不存在")
+            
+        try:
+            # 读取字幕文件
+            async with aiofiles.open(subtitle_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                subtitles = json.loads(content)
+                
+            # 检查索引是否有效
+            if not isinstance(subtitles, list):
+                raise HTTPException(400, "无效的字幕文件格式")
+                
+            if index < 0 or index >= len(subtitles):
+                raise HTTPException(400, "无效的字幕索引")
+                
+            # 删除对应的音频文件（如果存在）
+            audio_file = AUDIO_DIR / file_id_without_ext / f"{index}.mp3"
+            if audio_file.exists():
+                audio_file.unlink()
+                
+            # 删除字幕
+            deleted_subtitle = subtitles.pop(index)
+            
+            # 保存更新后的字幕文件
+            async with aiofiles.open(subtitle_file, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(subtitles, ensure_ascii=False, indent=2))
+                
+            return {
+                "status": "success",
+                "message": "字幕删除成功",
+                "deleted_subtitle": deleted_subtitle
+            }
+            
+        except json.JSONDecodeError:
+            raise HTTPException(500, "字幕文件格式错误")
+        except IOError as e:
+            raise HTTPException(500, f"文件读写错误: {str(e)}")
+            
+    except Exception as e:
+        print(f"删除字幕失败: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(500, f"删除字幕失败: {str(e)}")
+
 async def update_subtitle(file_id: str, data: dict):
     """更新字幕内容"""
     try:

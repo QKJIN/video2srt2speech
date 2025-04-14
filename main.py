@@ -7,6 +7,11 @@ import math
 import asyncio
 import zipfile
 import os
+from pydantic import BaseModel
+
+class DeleteSubtitleRequest(BaseModel):
+    file_id: str
+    index: int
 
 from modules import (
     config, 
@@ -359,6 +364,22 @@ async def generate_single_speech_endpoint(
 class SubtitleUploadRequest(BaseModel):
     file_id: str
     subtitles: list[dict]
+
+@app.post("/delete-subtitle")
+async def delete_subtitle_endpoint(data: DeleteSubtitleRequest):
+    """处理删除字幕请求"""
+    try:
+        # 调用字幕模块的删除函数
+        result = await subtitles.delete_subtitle(data.file_id, data.index)
+        return result
+    except Exception as e:
+        print(f"删除字幕失败: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=500,
+            detail=f"删除字幕失败: {str(e)}"
+        )
 
 @app.post("/upload-subtitles")
 async def upload_subtitles_endpoint(data: SubtitleUploadRequest):

@@ -368,7 +368,8 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                                 <select class="speed-control" data-index="${i}">
                                     ${speedOptions}
                                 </select>
-                            </div>                       
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger delete-btn ms-2" onclick="deleteSubtitle(${i})">删除</button>
                         </div>
                     </div>
                     <div class="subtitle-text">
@@ -479,6 +480,44 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                 }
             });
         });
+
+        // 添加删除字幕的函数
+        window.deleteSubtitle = async function(index) {
+            if (!confirm('确定要删除这条字幕吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/delete-subtitle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        index: index
+                    })
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || '删除失败');
+                }
+
+                // 从数组中移除字幕
+                subtitles.splice(index, 1);
+                if (translations && translations[index]) {
+                    translations.splice(index, 1);
+                }
+
+                // 重新显示字幕列表
+                displaySubtitles(currentFileId, subtitles, translations);
+                showMessage('字幕已删除', 'success');
+            } catch (error) {
+                console.error('删除字幕失败:', error);
+                showMessage('删除字幕失败: ' + error.message, 'error');
+            }
+        };
 
         // 添加字幕编辑事件监听器
         document.querySelectorAll('.subtitle-item').forEach(item => {
