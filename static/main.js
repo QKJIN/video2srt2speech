@@ -123,6 +123,10 @@ function previewVideo(file) {
     const url = URL.createObjectURL(file);
     videoPlayer.src = url;
     videoContainer.style.display = 'block';
+    
+    // 确保视频加载并播放
+    videoPlayer.load();
+    videoPlayer.play().catch(e => console.log('视频预览播放失败:', e));
 }
 
 // 上传视频文件
