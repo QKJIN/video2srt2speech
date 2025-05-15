@@ -358,10 +358,10 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
             ).join('');
 
             html += `
-                <div class="subtitle-item" data-index="${i}" data-start="${subtitle.start}">
+                <div class="subtitle-item" data-index="${i}" data-start="${subtitle.start}" data-duration="${subtitle.duration}">
                     <div class="subtitle-header">
                         <span class="sequence-number" data-time="${subtitle.start}">${sequenceNumber}</span>
-                        <span class="subtitle-time">${startTime} - ${endTime}</span>
+                        <span class="subtitle-time" title="点击编辑时间">${startTime} - ${endTime}</span>
                         <div class="subtitle-controls">
                             <button class="btn btn-sm btn-outline-primary edit-btn">编辑</button>
                             <button class="btn btn-sm btn-outline-success save-btn" style="display: none;">保存</button>
@@ -374,6 +374,25 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                                 </select>
                             </div>
                             <button class="btn btn-sm btn-outline-danger delete-btn ms-2" onclick="deleteSubtitle(${i})">删除</button>
+                        </div>
+                    </div>
+                    <div class="time-editor">
+                        <div>
+                            <input type="text" class="form-control form-control-sm start-time-input" value="${startTime}" placeholder="开始时间">
+                        </div>
+                        <span class="time-separator">-</span>
+                        <div>
+                            <input type="text" class="form-control form-control-sm end-time-input" value="${endTime}" placeholder="结束时间">
+                        </div>
+                        <div class="time-editor-buttons">
+                            <button class="btn btn-sm btn-success save-time-btn">保存</button>
+                            <button class="btn btn-sm btn-secondary cancel-time-btn">取消</button>
+                        </div>
+                        <div class="time-adjust-controls ms-2">
+                            <button class="time-adjust-btn" data-adjust="-0.5">-0.5s</button>
+                            <button class="time-adjust-btn" data-adjust="-0.1">-0.1s</button>
+                            <button class="time-adjust-btn" data-adjust="0.1">+0.1s</button>
+                            <button class="time-adjust-btn" data-adjust="0.5">+0.5s</button>
                         </div>
                     </div>
                     <div class="subtitle-text">
@@ -437,6 +456,44 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                     color: #666;
                     font-size: 0.9em;
                     font-family: monospace;
+                    cursor: pointer;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    transition: background-color 0.2s;
+                }
+                .subtitle-time:hover {
+                    background-color: #f0f0f0;
+                }
+                .time-editor {
+                    display: none;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    margin: 8px 0;
+                    padding: 8px;
+                    background-color: #f8f9fa;
+                    border-radius: 4px;
+                }
+                .time-separator {
+                    margin: 0 8px;
+                }
+                .time-editor-buttons {
+                    margin-left: 10px;
+                }
+                .time-adjust-controls {
+                    display: flex;
+                    margin-top: 5px;
+                }
+                .time-adjust-btn {
+                    padding: 2px 5px;
+                    margin: 0 2px;
+                    font-size: 0.8em;
+                    background-color: #e9ecef;
+                    border: 1px solid #ced4da;
+                    border-radius: 3px;
+                    cursor: pointer;
+                }
+                .time-adjust-btn:hover {
+                    background-color: #dee2e6;
                 }
                 .subtitle-text {
                     line-height: 1.6;
@@ -465,6 +522,9 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                 .duration-notice {
                     color: orange;
                 }
+                .editing-time .subtitle-time {
+                    background-color: #e3f2fd;
+                }
             `;
             document.head.appendChild(style);
         }
@@ -482,6 +542,123 @@ async function displaySubtitles(fileId, subtitleData, translationData = null) {
                     videoPlayer.currentTime = time;
                     videoPlayer.play().catch(e => console.log('播放失败:', e));
                 }
+            });
+        });
+
+        // 添加时间编辑事件监听器
+        document.querySelectorAll('.subtitle-item').forEach(item => {
+            const timeSpan = item.querySelector('.subtitle-time');
+            const timeEditor = item.querySelector('.time-editor');
+            const startTimeInput = item.querySelector('.start-time-input');
+            const endTimeInput = item.querySelector('.end-time-input');
+            const saveTimeBtn = item.querySelector('.save-time-btn');
+            const cancelTimeBtn = item.querySelector('.cancel-time-btn');
+            const timeAdjustBtns = item.querySelectorAll('.time-adjust-btn');
+            
+            // 保存原始时间值
+            let originalStartTime = startTimeInput.value;
+            let originalEndTime = endTimeInput.value;
+            
+            // 点击时间显示编辑器
+            timeSpan.addEventListener('click', function() {
+                console.log('时间编辑器点击事件触发');
+                item.classList.add('editing-time');
+                timeEditor.style.display = 'flex';
+                startTimeInput.focus();
+            });
+            
+            // 取消编辑
+            cancelTimeBtn.addEventListener('click', () => {
+                startTimeInput.value = originalStartTime;
+                endTimeInput.value = originalEndTime;
+                timeEditor.style.display = 'none';
+                item.classList.remove('editing-time');
+            });
+            
+            // 保存时间更改
+            saveTimeBtn.addEventListener('click', async () => {
+                const index = parseInt(item.dataset.index);
+                const newStartTime = timeToSeconds(startTimeInput.value);
+                const newEndTime = timeToSeconds(endTimeInput.value);
+                
+                if (isNaN(newStartTime) || isNaN(newEndTime)) {
+                    showMessage('时间格式无效', 'error');
+                    return;
+                }
+                
+                if (newEndTime <= newStartTime) {
+                    showMessage('结束时间必须大于开始时间', 'error');
+                    return;
+                }
+                
+                const newDuration = newEndTime - newStartTime;
+                
+                try {
+                    showLoading();
+                    const response = await fetch('/update-subtitle-time', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            file_id: currentFileId,
+                            index: index,
+                            start: newStartTime,
+                            duration: newDuration
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.detail || '保存时间失败');
+                    }
+                    
+                    // 更新成功
+                    subtitles[index].start = newStartTime;
+                    subtitles[index].duration = newDuration;
+                    
+                    // 更新显示
+                    timeSpan.textContent = `${formatTime(newStartTime)} - ${formatTime(newEndTime)}`;
+                    item.dataset.start = newStartTime;
+                    item.dataset.duration = newDuration;
+                    
+                    // 更新序号元素的 data-time 属性
+                    const sequenceNumber = item.querySelector('.sequence-number');
+                    if (sequenceNumber) {
+                        sequenceNumber.dataset.time = newStartTime;
+                    }
+                    
+                    // 更新原始值
+                    originalStartTime = startTimeInput.value;
+                    originalEndTime = endTimeInput.value;
+                    
+                    timeEditor.style.display = 'none';
+                    item.classList.remove('editing-time');
+                    
+                    showMessage('时间更新成功', 'success');
+                } catch (error) {
+                    console.error('保存时间失败:', error);
+                    showMessage('保存时间失败: ' + error.message, 'error');
+                } finally {
+                    hideLoading();
+                }
+            });
+            
+            // 时间微调按钮
+            timeAdjustBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const adjustValue = parseFloat(btn.dataset.adjust);
+                    const startTime = timeToSeconds(startTimeInput.value);
+                    const endTime = timeToSeconds(endTimeInput.value);
+                    
+                    if (!isNaN(startTime) && !isNaN(endTime)) {
+                        const newStartTime = Math.max(0, startTime + adjustValue);
+                        const newEndTime = endTime + adjustValue;
+                        
+                        startTimeInput.value = formatTime(newStartTime);
+                        endTimeInput.value = formatTime(newEndTime);
+                    }
+                });
             });
         });
 
@@ -1206,14 +1383,16 @@ function displaySubtitledVideo(videoFile) {
 
 // 格式化时间
 function formatTime(seconds) {
-    if (isNaN(seconds)) {
+    if (isNaN(seconds) || seconds < 0) {
         console.error('无效的时间值:', seconds);
-        return '00:00';
+        return '00:00:00.000';
     }
     
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toFixed(3).padStart(6, '0')}`;
 }
 
 // 加载目标语言的可用语音
@@ -1622,17 +1801,28 @@ function parseSRT(srtString) {
 
 function timeToSeconds(timeString) {
     try {
-        const [time, ms] = timeString.split(',');
-        if (!time || !ms) {
-            throw new Error('无效的时间格式');
-        }
+        // 处理SRT格式 (00:00:00,000)
+        if (timeString.includes(',')) {
+            const [time, ms] = timeString.split(',');
+            if (!time || !ms) {
+                throw new Error('无效的时间格式');
+            }
 
-        const [hours, minutes, seconds] = time.split(':').map(Number);
-        if (isNaN(hours) || isNaN(minutes) || isNaN(seconds) || isNaN(parseInt(ms))) {
-            throw new Error('无效的时间值');
-        }
+            const [hours, minutes, seconds] = time.split(':').map(Number);
+            if (isNaN(hours) || isNaN(minutes) || isNaN(seconds) || isNaN(parseInt(ms))) {
+                throw new Error('无效的时间值');
+            }
 
-        return hours * 3600 + minutes * 60 + seconds + parseInt(ms) / 1000;
+            return hours * 3600 + minutes * 60 + seconds + parseInt(ms) / 1000;
+        } 
+        // 处理简单格式 (HH:MM:SS 或 HH:MM:SS.mmm)
+        else {
+            const parts = timeString.split(':');
+            if (parts.length !== 3) return NaN;
+            
+            const [hours, minutes, seconds] = parts;
+            return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
+        }
     } catch (error) {
         console.error('时间转换错误:', error, timeString);
         throw error;

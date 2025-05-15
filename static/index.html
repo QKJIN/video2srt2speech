@@ -240,6 +240,55 @@
             font-size: 0.9em;
             font-family: monospace;
             margin: 0 10px;
+            cursor: pointer;
+        }
+        .time-editor {
+            display: none;
+            align-items: center;
+            gap: 5px;
+            margin: 5px 0;
+        }
+        
+        .time-editor input {
+            width: 80px;
+            text-align: center;
+            font-family: monospace;
+        }
+        
+        .time-editor .time-separator {
+            font-weight: bold;
+            margin: 0 2px;
+        }
+        
+        .time-editor-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        
+        /* 高亮显示正在编辑的时间 */
+        .editing-time .subtitle-time {
+            color: #2196F3;
+            font-weight: bold;
+        }
+        
+        /* 时间调整按钮 */
+        .time-adjust-btn {
+            font-size: 12px;
+            padding: 0 4px;
+            margin: 0 2px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+            border-radius: 3px;
+        }
+        
+        .time-adjust-btn:hover {
+            background: #e9ecef;
+        }
+        
+        .subtitle-controls {
+            display: flex;
+            gap: 5px;
         }
 
         .subtitle-controls {
@@ -548,33 +597,33 @@
                     <option value="azure">Azure Speech (在线)</option>
                 </select>
             </div>
+
+        </div>
+        <div class="language-control-item">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="useLocalTTS" checked>
+                <label class="form-check-label" for="useLocalTTS">
+                    使用EDGE TTS
+                </label>
+            </div>
+            <!-- <div class="form-check"></div>
+                <input class="form-check-input" type="checkbox" id="userAzure">
+                <label class="form-check-label" for="userAzure">
+                    使用Azure服务
+                </label>
+            </div> -->
             <div class="language-control-item">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="useLocalTTS" checked>
-                    <label class="form-check-label" for="useLocalTTS">
-                        使用EDGE TTS
-                    </label>
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input" id="includeOriginalAudio" checked>
+                    <label class="form-check-label" for="includeOriginalAudio">合并语音是否包含原始音频</label>
                 </div>
-                <!-- <div class="form-check"></div>
-                    <input class="form-check-input" type="checkbox" id="userAzure">
-                    <label class="form-check-label" for="userAzure">
-                        使用Azure服务
-                    </label>
-                </div> -->
-                <div class="language-control-item">
-                    <div class="form-check mb-2">
-                        <input type="checkbox" class="form-check-input" id="includeOriginalAudio" checked>
-                        <label class="form-check-label" for="includeOriginalAudio">合并语音是否包含原始音频</label>
-                    </div>
-                    <div class="mb-2">
-                        <label for="audioVolume" class="form-label">原始音频音量调节</label>
-                        <input type="range" class="form-range" id="audioVolume" min="0" max="0.2" step="0.02" value="0.1">
-                        <span id="volumeValue">0.1</span>
-                    </div>
+                <div class="mb-2">
+                    <label for="audioVolume" class="form-label">原始音频音量调节</label>
+                    <input type="range" class="form-range" id="audioVolume" min="0" max="0.2" step="0.02" value="0.1">
+                    <span id="volumeValue">0.1</span>
                 </div>
             </div>
         </div>
-
         <div class="btn-toolbar">
             <button id="generateSubtitlesBtn" class="btn btn-primary me-2">生成字幕</button>
             <button id="translateBtn" class="btn btn-info me-2">翻译字幕</button>

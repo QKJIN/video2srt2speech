@@ -408,3 +408,56 @@ async def upload_subtitles_endpoint(data: SubtitleUploadRequest):
             status_code=500,
             detail=f"字幕上传失败: {str(e)}"
         )
+
+@app.post("/update-subtitle-time")
+async def update_subtitle_time_endpoint(data: dict):
+    """更新字幕时间"""
+    try:
+        file_id = data.get("file_id")
+        index = data.get("index")
+        start = data.get("start")
+        duration = data.get("duration")
+        
+        if file_id is None or index is None or start is None or duration is None:
+            raise HTTPException(400, "缺少必要的参数")
+        
+        # 确保字幕目录存在
+        file_id_without_ext = file_id.rsplit('.', 1)[0] if '.' in file_id else file_id
+        subtitle_path = SUBTITLE_DIR / f"{file_id_without_ext}.json"
+        
+        if not subtitle_path.exists():
+            raise HTTPException(404, "字幕文件不存在")
+        
+        # 读取字幕文件
+        with open(subtitle_path, "r", encoding="utf-8") as f:
+            subtitles = json.load(f)
+        
+        # 检查索引是否有效
+        if not isinstance(subtitles, list):
+            raise HTTPException(400, "无效的字幕文件格式")
+        
+        if index < 0 or index >= len(subtitles):
+            raise HTTPException(400, "无效的字幕索引")
+        
+        # 更新字幕时间
+        subtitles[index]["start"] = float(start)
+        subtitles[index]["duration"] = float(duration)
+        
+        # 写入更新后的字幕
+        with open(subtitle_path, "w", encoding="utf-8") as f:
+            json.dump(subtitles, f, ensure_ascii=False, indent=2)
+        
+        return {
+            "status": "success",
+            "message": "字幕时间更新成功",
+            "index": index,
+            "start": start,
+            "duration": duration
+        }
+        
+    except Exception as e:
+        print(f"更新字幕时间失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"更新字幕时间失败: {str(e)}"
+        )
